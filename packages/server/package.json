@@ -1,0 +1,28 @@
+{
+  "name": "@differ/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --persist-to .wrangler/state",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
+    "build": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply differ --local",
+    "db:migrate:remote": "wrangler d1 migrations apply differ --remote",
+    "db:seed:local": "node --experimental-strip-types scripts/import-puzzles.ts --local",
+    "db:seed:remote": "node --experimental-strip-types scripts/import-puzzles.ts --remote"
+  },
+  "dependencies": {
+    "@differ/shared": "workspace:*",
+    "@tsndr/cloudflare-worker-jwt": "^3.1.4",
+    "hono": "^4.6.9",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241022.0",
+    "@types/node": "^20.16.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^3.84.0"
+  }
+}

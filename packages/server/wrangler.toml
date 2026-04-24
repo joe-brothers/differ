@@ -1,0 +1,26 @@
+name = "differ-server"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+JWT_ISSUER = "differ"
+CDN_BASE = "https://differ-assets.joe-brothers.com"
+
+# Local dev uses same bindings; wrangler d1 --local persists to .wrangler/
+[[d1_databases]]
+binding = "DB"
+database_name = "differ"
+database_id = "00000000-0000-0000-0000-000000000000"   # replaced on `wrangler d1 create differ`
+migrations_dir = "src/db/migrations"
+
+[[durable_objects.bindings]]
+name = "GAME_ROOM"
+class_name = "GameRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom"]
+
+[observability]
+enabled = true

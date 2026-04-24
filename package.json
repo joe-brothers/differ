@@ -1,0 +1,20 @@
+{
+  "name": "differ",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev:server": "pnpm -F @differ/server dev",
+    "dev:client": "pnpm -F @differ/client dev",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.30.3"
+}
