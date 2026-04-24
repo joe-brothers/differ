@@ -1,5 +1,5 @@
 import { Application, Assets } from "pixi.js";
-import type { Puzzle } from "@differ/shared";
+import type { Puzzle, ServerWelcome } from "@differ/shared";
 import { SceneManager } from "./SceneManager";
 import { gameState } from "../managers/GameStateManager";
 import { authState } from "../managers/AuthStateManager";
@@ -13,6 +13,30 @@ import type { ImageData, SelectedDifference, DiffRect, GameType } from "../types
 import { CDN_BASE } from "../constants";
 import { roomApi } from "../network/rest";
 import { RoomSocket } from "../network/ws";
+
+// Persisted on game_start (or welcome-in-progress) so a tab close/reopen
+// during an active game can rejoin automatically instead of dumping the
+// player back on the main menu.
+const ACTIVE_ROOM_KEY = "differ_active_room";
+type PersistedRoom = { roomCode: string; gameType: GameType };
+
+function readActiveRoom(): PersistedRoom | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_ROOM_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedRoom;
+    if (!parsed?.roomCode || !parsed?.gameType) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+function writeActiveRoom(roomCode: string, gameType: GameType): void {
+  try { localStorage.setItem(ACTIVE_ROOM_KEY, JSON.stringify({ roomCode, gameType })); } catch { /* ignore */ }
+}
+function clearActiveRoom(): void {
+  try { localStorage.removeItem(ACTIVE_ROOM_KEY); } catch { /* ignore */ }
+}
 
 export class Game {
   private app: Application;
@@ -43,10 +67,28 @@ export class Game {
 
   async start(): Promise<void> {
     const restored = await authState.tryRestore();
-    if (restored) {
-      await this.showMainMenu();
-    } else {
+    if (!restored) {
       await this.showAuthScene();
+      return;
+    }
+    // Tab close/reopen during an active game: reconnect to the persisted
+    // room and let the welcome-in-progress handler mount GameScene.
+    const active = readActiveRoom();
+    if (active) {
+      const resumed = await this.tryResumeActiveRoom(active);
+      if (resumed) return;
+    }
+    await this.showMainMenu();
+  }
+
+  private async tryResumeActiveRoom(active: PersistedRoom): Promise<boolean> {
+    await this.sceneManager.switchTo(LoadingScene);
+    try {
+      return await this.connectAndPlay(active.roomCode, active.gameType, { resume: true });
+    } catch {
+      clearActiveRoom();
+      this.teardownSocket();
+      return false;
     }
   }
 
@@ -55,6 +97,7 @@ export class Game {
   }
 
   async showMainMenu(): Promise<void> {
+    clearActiveRoom();
     this.teardownSocket();
     gameState.reset();
     await this.sceneManager.switchTo(MainMenuScene);
@@ -116,7 +159,8 @@ export class Game {
   private async connectAndPlay(
     roomCode: string,
     gameType: GameType,
-  ): Promise<void> {
+    options: { resume?: boolean } = {},
+  ): Promise<boolean> {
     const token = authState.getToken();
     if (!token) throw new Error("No auth token");
 
@@ -131,10 +175,93 @@ export class Game {
       const images = await this.loadPuzzleImages(msg.puzzles);
       const differences = this.buildSelectedDifferences(images);
       gameState.initGame(roomCode, images, differences, gameType, msg.startedAt);
+      writeActiveRoom(roomCode, gameType);
       await this.sceneManager.switchTo(GameScene);
     });
 
+    // Game ended — the room reverts to a waiting/rematch lobby, so there
+    // is no longer an in-progress session to auto-rejoin on next load.
+    socket.on("game_end", () => {
+      clearActiveRoom();
+    });
+
+    // Welcome-based rejoin: if the server says a game is already in
+    // progress for this socket's user (i.e. we were already a player and
+    // reconnected), hydrate from the welcome payload and mount GameScene.
+    socket.on("welcome", async (msg: ServerWelcome) => {
+      if (
+        msg.status === "in_progress" &&
+        msg.puzzles &&
+        msg.startedAt != null
+      ) {
+        await this.mountResumedGame(roomCode, gameType, msg);
+      }
+    });
+
+    if (options.resume) {
+      // Await welcome so the resume caller knows whether a GameScene was
+      // actually mounted (true) or we should fall through to the main
+      // menu (false — room is no longer in progress, or socket died).
+      const welcomed = new Promise<boolean>((resolve) => {
+        const onWelcome = (msg: ServerWelcome) => {
+          socket.off("welcome", onWelcome);
+          socket.off("close", onClose);
+          resolve(msg.status === "in_progress");
+        };
+        const onClose = () => {
+          socket.off("welcome", onWelcome);
+          resolve(false);
+        };
+        socket.on("welcome", onWelcome);
+        socket.on("close", onClose);
+      });
+      await socket.connect();
+      return welcomed;
+    }
+
     await socket.connect();
+    return true;
+  }
+
+  private async mountResumedGame(
+    roomCode: string,
+    gameType: GameType,
+    welcome: ServerWelcome,
+  ): Promise<void> {
+    if (!welcome.puzzles || welcome.startedAt == null) return;
+    const images = await this.loadPuzzleImages(welcome.puzzles);
+    const differences = this.buildSelectedDifferences(images);
+
+    if (welcome.yourFound) {
+      for (const entry of welcome.yourFound) {
+        const diffs = differences[entry.puzzleIdx];
+        if (!diffs) continue;
+        const foundIds = new Set(entry.diffIds);
+        for (const d of diffs) if (foundIds.has(d.rect.id)) d.found = true;
+      }
+    }
+
+    const myId = authState.getUser()?.userId;
+    const myFoundCount = differences.reduce(
+      (n, arr) => n + arr.filter((d) => d.found).length,
+      0,
+    );
+    const opponentCount =
+      welcome.progress?.find((p) => p.userId !== myId)?.foundCount ?? 0;
+    const opponent = welcome.players.find((p) => p.userId !== myId);
+    if (opponent) gameState.setOpponentUsername(opponent.name);
+
+    gameState.initGame(
+      roomCode,
+      images,
+      differences,
+      gameType,
+      welcome.startedAt,
+      myFoundCount,
+      opponentCount,
+    );
+    writeActiveRoom(roomCode, gameType);
+    await this.sceneManager.switchTo(GameScene);
   }
 
   private teardownSocket(): void {

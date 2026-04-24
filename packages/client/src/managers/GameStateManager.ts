@@ -47,6 +47,8 @@ export class GameStateManager extends EventEmitter {
     differences: SelectedDifference[][],
     gameType: GameType,
     serverStartedAt: number,
+    existingFoundCount: number = 0,
+    existingOpponentCount: number = 0,
   ): void {
     const prevOpponentName = this.state.opponentUsername;
     this.state = {
@@ -57,9 +59,9 @@ export class GameStateManager extends EventEmitter {
       currentImageIndex: 0,
       selectedImages: images,
       selectedDifferences: differences,
-      foundCount: 0,
+      foundCount: existingFoundCount,
       inputDisabled: false,
-      opponentFoundCount: 0,
+      opponentFoundCount: existingOpponentCount,
       opponentUsername: prevOpponentName,
     };
     this.emit("gameInitialized");

@@ -221,7 +221,7 @@ export class GameScene extends Container implements IScene {
 
     if (state.gameType === "one_on_one") {
       this.opponentProgressText = new Text({
-        text: `Opponent 0/${TOTAL_DIFFS_PER_GAME}`,
+        text: `Opponent ${state.opponentFoundCount}/${TOTAL_DIFFS_PER_GAME}`,
         style: {
           fontFamily: "Arial, sans-serif",
           fontSize: 16,
@@ -236,6 +236,10 @@ export class GameScene extends Container implements IScene {
       );
       this.uiLayer.addChild(this.opponentProgressText);
     }
+
+    // Hydrate my progress count too (non-zero on resume from a mid-game
+    // reconnect where some diffs were already found before the reload).
+    this.progressDisplay.updateFoundCount(state.foundCount);
   }
 
   private setupOverlays(): void {

@@ -387,13 +387,17 @@ export class GameRoom implements DurableObject {
     }
     await Promise.all(insertPromises);
 
+    // Report every player's elapsed time in the broadcast so losers can show
+    // how long the game lasted, not 00:00. Losers (and timeouts) never had
+    // their own elapsedMs set — fall back to game-end-minus-start.
+    const gameElapsedMs = this.room.startedAt ? Date.now() - this.room.startedAt : null;
     this.broadcast({
       kind: 'game_end',
       winnerId,
       results: Object.values(this.room.players).map((p) => ({
         userId: p.userId,
         name: p.name,
-        elapsedMs: p.elapsedMs,
+        elapsedMs: p.elapsedMs ?? gameElapsedMs,
         foundCount: totalFound(p),
       })),
     });
