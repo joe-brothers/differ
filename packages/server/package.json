@@ -16,6 +16,7 @@
   "dependencies": {
     "@differ/shared": "workspace:*",
     "@tsndr/cloudflare-worker-jwt": "^3.1.4",
+    "drizzle-orm": "^0.36.4",
     "hono": "^4.6.9",
     "zod": "^3.23.8"
   },

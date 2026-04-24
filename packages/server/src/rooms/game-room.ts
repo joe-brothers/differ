@@ -5,6 +5,8 @@ import {
 } from '@differ/shared';
 import type { Env } from '../env.js';
 import { verifyToken } from '../auth/jwt.js';
+import { getDb } from '../db/client.js';
+import { gameResults } from '../db/schema.js';
 import { buildRound, findHit, type RoundPuzzle } from '../puzzles/service.js';
 
 type RoomStatus = 'waiting' | 'in_progress' | 'ended';
@@ -372,20 +374,24 @@ export class GameRoom implements DurableObject {
     this.room.winnerId = winnerId;
 
     // Persist game results to D1 for everyone with a complete run.
-    const insertPromises: Promise<unknown>[] = [];
+    const rows: Array<typeof gameResults.$inferInsert> = [];
     for (const p of Object.values(this.room.players)) {
       if (p.elapsedMs == null && p.userId === winnerId && this.room.startedAt) {
         p.elapsedMs = Date.now() - this.room.startedAt;
       }
       if (p.elapsedMs != null) {
-        insertPromises.push(
-          this.env.DB.prepare(
-            `INSERT INTO game_results (id, user_id, room_code, mode, elapsed_ms) VALUES (?, ?, ?, ?, ?)`,
-          ).bind(crypto.randomUUID(), p.userId, this.room.code, this.room.mode, p.elapsedMs).run(),
-        );
+        rows.push({
+          id: crypto.randomUUID(),
+          userId: p.userId,
+          roomCode: this.room.code,
+          mode: this.room.mode,
+          elapsedMs: p.elapsedMs,
+        });
       }
     }
-    await Promise.all(insertPromises);
+    if (rows.length > 0) {
+      await getDb(this.env.DB).insert(gameResults).values(rows).run();
+    }
 
     // Report every player's elapsed time in the broadcast so losers can show
     // how long the game lasted, not 00:00. Losers (and timeouts) never had

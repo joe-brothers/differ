@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
+import { asc, count, desc, eq, min } from 'drizzle-orm';
 import { LeaderboardQuery, type LeaderboardRes } from '@differ/shared';
 import type { Env } from '../env.js';
+import { getDb } from '../db/client.js';
+import { gameResults, users } from '../db/schema.js';
 
 export const leaderboardRoutes = new Hono<{ Bindings: Env }>();
 
@@ -17,27 +20,32 @@ leaderboardRoutes.get('/', async (c) => {
   }
   const { mode, limit, offset } = parsed.data;
 
-  const { results } = await c.env.DB.prepare(
-    `SELECT u.id AS user_id,
-            u.name AS name,
-            COUNT(*) AS wins,
-            MIN(gr.elapsed_ms) AS best_ms
-     FROM game_results gr JOIN users u ON u.id = gr.user_id
-     WHERE gr.mode = ?
-     GROUP BY u.id, u.name
-     ORDER BY wins DESC, best_ms ASC
-     LIMIT ? OFFSET ?`,
-  ).bind(mode, limit, offset).all<{
-    user_id: string; name: string; wins: number; best_ms: number | null;
-  }>();
+  const db = getDb(c.env.DB);
+  const wins = count().as('wins');
+  const bestMs = min(gameResults.elapsedMs).as('best_ms');
+
+  const results = await db
+    .select({
+      userId: users.id,
+      name: users.name,
+      wins,
+      bestMs,
+    })
+    .from(gameResults)
+    .innerJoin(users, eq(users.id, gameResults.userId))
+    .where(eq(gameResults.mode, mode))
+    .groupBy(users.id, users.name)
+    .orderBy(desc(wins), asc(bestMs))
+    .limit(limit)
+    .offset(offset);
 
   const body: LeaderboardRes = {
     entries: results.map((r, i) => ({
       rank: offset + i + 1,
-      userId: r.user_id,
+      userId: r.userId,
       name: r.name,
       wins: r.wins,
-      bestMs: r.best_ms,
+      bestMs: r.bestMs,
     })),
   };
   return c.json(body);

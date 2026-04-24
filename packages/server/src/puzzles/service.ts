@@ -1,9 +1,12 @@
 import { z } from 'zod';
+import { sql } from 'drizzle-orm';
 import {
   Puzzle, RectArea,
   PUZZLES_PER_GAME, DIFFS_PER_PUZZLE, PUZZLE_CANDIDATE_COUNT,
 } from '@differ/shared';
 import type { Env } from '../env.js';
+import { getDb } from '../db/client.js';
+import { puzzles } from '../db/schema.js';
 
 const StoredDifferences = z.array(RectArea);
 
@@ -31,12 +34,18 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-async function loadCandidates(db: D1Database): Promise<LoadedPuzzle[]> {
-  const { results } = await db.prepare(
-    `SELECT id, differences, path, extension FROM puzzles ORDER BY RANDOM() LIMIT ?`,
-  ).bind(PUZZLE_CANDIDATE_COUNT).all<{
-    id: string; differences: string; path: string; extension: string;
-  }>();
+async function loadCandidates(d1: D1Database): Promise<LoadedPuzzle[]> {
+  const db = getDb(d1);
+  const results = await db
+    .select({
+      id: puzzles.id,
+      differences: puzzles.differences,
+      path: puzzles.path,
+      extension: puzzles.extension,
+    })
+    .from(puzzles)
+    .orderBy(sql`RANDOM()`)
+    .limit(PUZZLE_CANDIDATE_COUNT);
 
   const loaded: LoadedPuzzle[] = [];
   for (const row of results) {
