@@ -41,6 +41,7 @@ export const RoomPlayer = z.object({
   userId: z.string(),
   name: z.string(),
   ready: z.boolean(),
+  online: z.boolean(),
   isYou: z.boolean().optional(),
 });
 export type RoomPlayer = z.infer<typeof RoomPlayer>;
@@ -81,6 +82,18 @@ export const ServerPlayerLeft = z.object({
   userId: z.string(),
 });
 export type ServerPlayerLeft = z.infer<typeof ServerPlayerLeft>;
+
+export const ServerPlayerOffline = z.object({
+  kind: z.literal('player_offline'),
+  userId: z.string(),
+});
+export type ServerPlayerOffline = z.infer<typeof ServerPlayerOffline>;
+
+export const ServerPlayerOnline = z.object({
+  kind: z.literal('player_online'),
+  userId: z.string(),
+});
+export type ServerPlayerOnline = z.infer<typeof ServerPlayerOnline>;
 
 export const ServerPlayerReady = z.object({
   kind: z.literal('player_ready'),
@@ -128,6 +141,8 @@ export const ServerMsg = z.discriminatedUnion('kind', [
   ServerWelcome,
   ServerPlayerJoined,
   ServerPlayerLeft,
+  ServerPlayerOffline,
+  ServerPlayerOnline,
   ServerPlayerReady,
   ServerGameStart,
   ServerClickResult,

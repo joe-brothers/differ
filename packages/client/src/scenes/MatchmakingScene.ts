@@ -21,7 +21,15 @@ export class MatchmakingScene extends Container implements IScene {
 
   async init(): Promise<void> {
     this.createTitle();
-    this.showChooser();
+    // Reused-room path: after a 1v1 game ends and the opponent leaves, we
+    // come back here already connected and waiting on the existing code.
+    const resumeCode = game.consumePendingWaitingRoomCode();
+    if (resumeCode) {
+      this.roomCode = resumeCode;
+      this.showWaitingWithCode(resumeCode);
+    } else {
+      this.showChooser();
+    }
   }
 
   private createTitle(): void {
@@ -73,10 +81,31 @@ export class MatchmakingScene extends Container implements IScene {
   }
 
   private async createRoom(): Promise<void> {
-    this.resetOverlay();
-    if (!this.overlay) return;
+    const { codeEl, hint } = this.renderWaitingView(null);
+    try {
+      const code = await game.createRoom1v1();
+      if (this.cancelled) return;
+      this.roomCode = code;
+      codeEl.textContent = code;
+      this.wireWaitingSocket();
+    } catch (err) {
+      codeEl.textContent = "";
+      hint.textContent = `Failed: ${(err as Error).message}`;
+    }
+  }
 
-    const card = this.overlay.createFormContainer();
+  // Renders the waiting-for-opponent card. When `code` is given, the socket
+  // is assumed to already be connected (resume path after opponent left).
+  private showWaitingWithCode(code: string): void {
+    this.renderWaitingView(code);
+    this.wireWaitingSocket();
+  }
+
+  private renderWaitingView(
+    code: string | null,
+  ): { codeEl: HTMLDivElement; hint: HTMLParagraphElement } {
+    this.resetOverlay();
+    const card = this.overlay!.createFormContainer();
 
     const heading = document.createElement("h2");
     heading.textContent = "Waiting for opponent";
@@ -102,7 +131,7 @@ export class MatchmakingScene extends Container implements IScene {
       margin: "8px 0",
       userSelect: "all",
     });
-    codeEl.textContent = "...";
+    codeEl.textContent = code ?? "...";
     card.appendChild(codeEl);
 
     const hint = document.createElement("p");
@@ -115,23 +144,14 @@ export class MatchmakingScene extends Container implements IScene {
     });
     card.appendChild(hint);
 
-    const cancelBtn = this.overlay.createButton(card, "Cancel");
+    const cancelBtn = this.overlay!.createButton(card, "Cancel");
     cancelBtn.style.background = "#3a3a5e";
     cancelBtn.addEventListener("click", () => {
       this.cancelled = true;
       game.showMainMenu();
     });
 
-    try {
-      const code = await game.createRoom1v1();
-      if (this.cancelled) return;
-      this.roomCode = code;
-      codeEl.textContent = code;
-      this.wireWaitingSocket();
-    } catch (err) {
-      codeEl.textContent = "";
-      hint.textContent = `Failed: ${(err as Error).message}`;
-    }
+    return { codeEl, hint };
   }
 
   private showJoinForm(): void {

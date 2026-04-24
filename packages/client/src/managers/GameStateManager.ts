@@ -21,11 +21,11 @@ export class GameStateManager extends EventEmitter {
       mode: "menu",
       gameType: "single",
       roomCode: "",
+      serverStartedAt: null,
       currentImageIndex: 0,
       selectedImages: [],
       selectedDifferences: [],
       foundCount: 0,
-      elapsedTime: 0,
       inputDisabled: false,
       opponentFoundCount: 0,
       opponentUsername: "",
@@ -45,20 +45,22 @@ export class GameStateManager extends EventEmitter {
     roomCode: string,
     images: ImageData[],
     differences: SelectedDifference[][],
-    gameType: GameType = "single",
+    gameType: GameType,
+    serverStartedAt: number,
   ): void {
+    const prevOpponentName = this.state.opponentUsername;
     this.state = {
       mode: "playing",
       gameType,
       roomCode,
+      serverStartedAt,
       currentImageIndex: 0,
       selectedImages: images,
       selectedDifferences: differences,
       foundCount: 0,
-      elapsedTime: 0,
       inputDisabled: false,
       opponentFoundCount: 0,
-      opponentUsername: "",
+      opponentUsername: prevOpponentName,
     };
     this.emit("gameInitialized");
   }
@@ -82,7 +84,7 @@ export class GameStateManager extends EventEmitter {
 
       if (this.state.foundCount === TOTAL_DIFFS_PER_GAME) {
         this.state.mode = "completed";
-        this.emit("gameCompleted", this.state.elapsedTime);
+        this.emit("gameCompleted");
       }
     }
   }
@@ -142,13 +144,6 @@ export class GameStateManager extends EventEmitter {
       this.state.inputDisabled = false;
       this.emit("inputEnabled");
     }, durationMs);
-  }
-
-  updateTime(deltaMs: number): void {
-    if (this.state.mode === "playing") {
-      this.state.elapsedTime += deltaMs / 1000;
-      this.emit("timeUpdated", this.state.elapsedTime);
-    }
   }
 
   pause(): void {

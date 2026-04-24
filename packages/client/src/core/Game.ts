@@ -21,6 +21,9 @@ export class Game {
   // Active room socket shared with GameScene once game starts.
   private socket: RoomSocket | null = null;
 
+  // Hand-off for MatchmakingScene: a room code to resume waiting on.
+  private pendingWaitingRoomCode: string | null = null;
+
   constructor(app: Application) {
     this.app = app;
     this.sceneManager = new SceneManager(app);
@@ -62,7 +65,22 @@ export class Game {
   }
 
   async showMatchmaking(): Promise<void> {
+    this.pendingWaitingRoomCode = null;
     await this.sceneManager.switchTo(MatchmakingScene);
+  }
+
+  // After a 1v1 game ends and the opponent leaves, the remaining player
+  // bounces back to MatchmakingScene's "waiting with this code" view —
+  // socket stays connected so a new opponent can simply join again.
+  async rejoinWaitingRoom(roomCode: string): Promise<void> {
+    this.pendingWaitingRoomCode = roomCode;
+    await this.sceneManager.switchTo(MatchmakingScene);
+  }
+
+  consumePendingWaitingRoomCode(): string | null {
+    const code = this.pendingWaitingRoomCode;
+    this.pendingWaitingRoomCode = null;
+    return code;
   }
 
   // Start a single-player sprint. Server auto-starts when the room fills
@@ -109,10 +127,10 @@ export class Game {
     // `game_start` is emitted by the server on both first-game auto-start
     // and successful rematch votes. Either way, rebuild state and mount
     // GameScene (the scene manager destroys any prior scene).
-    socket.on("game_start", async (msg: { puzzles: Puzzle[] }) => {
+    socket.on("game_start", async (msg: { puzzles: Puzzle[]; startedAt: number }) => {
       const images = await this.loadPuzzleImages(msg.puzzles);
       const differences = this.buildSelectedDifferences(images);
-      gameState.initGame(roomCode, images, differences, gameType);
+      gameState.initGame(roomCode, images, differences, gameType, msg.startedAt);
       await this.sceneManager.switchTo(GameScene);
     });
 

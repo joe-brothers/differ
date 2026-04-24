@@ -4,6 +4,8 @@ import type { Env } from '../env.js';
 
 export const leaderboardRoutes = new Hono<{ Bindings: Env }>();
 
+// A row in `game_results` represents a win (losers are never inserted), so
+// the leaderboard is a simple COUNT aggregation keyed by mode.
 leaderboardRoutes.get('/', async (c) => {
   const parsed = LeaderboardQuery.safeParse({
     mode: c.req.query('mode'),
@@ -16,13 +18,17 @@ leaderboardRoutes.get('/', async (c) => {
   const { mode, limit, offset } = parsed.data;
 
   const { results } = await c.env.DB.prepare(
-    `SELECT u.id AS user_id, u.name AS name, gr.elapsed_ms AS elapsed_ms, gr.completed_at AS completed_at
+    `SELECT u.id AS user_id,
+            u.name AS name,
+            COUNT(*) AS wins,
+            MIN(gr.elapsed_ms) AS best_ms
      FROM game_results gr JOIN users u ON u.id = gr.user_id
      WHERE gr.mode = ?
-     ORDER BY gr.elapsed_ms ASC
+     GROUP BY u.id, u.name
+     ORDER BY wins DESC, best_ms ASC
      LIMIT ? OFFSET ?`,
   ).bind(mode, limit, offset).all<{
-    user_id: string; name: string; elapsed_ms: number; completed_at: string;
+    user_id: string; name: string; wins: number; best_ms: number | null;
   }>();
 
   const body: LeaderboardRes = {
@@ -30,8 +36,8 @@ leaderboardRoutes.get('/', async (c) => {
       rank: offset + i + 1,
       userId: r.user_id,
       name: r.name,
-      elapsedMs: r.elapsed_ms,
-      completedAt: r.completed_at,
+      wins: r.wins,
+      bestMs: r.best_ms,
     })),
   };
   return c.json(body);

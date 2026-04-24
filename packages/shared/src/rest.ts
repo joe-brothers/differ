@@ -56,8 +56,8 @@ export const LeaderboardEntry = z.object({
   rank: z.number(),
   userId: z.string(),
   name: z.string(),
-  elapsedMs: z.number(),
-  completedAt: z.string(),
+  wins: z.number(),
+  bestMs: z.number().nullable(),
 });
 export type LeaderboardEntry = z.infer<typeof LeaderboardEntry>;
 

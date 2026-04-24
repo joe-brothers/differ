@@ -36,6 +36,10 @@ interface SocketAttachment {
 
 const ROOM_IDLE_TIMEOUT_MS = 30 * 60 * 1000;    // 30 min
 const GAME_TIMEOUT_MS = 10 * 60 * 1000;         // 10 min hard cap
+// Delay between game_start broadcast and actual play start, to cover
+// per-client image loading + countdown so both clients begin at the same
+// wall-clock moment. The client counts down to `startedAt`.
+const START_COUNTDOWN_MS = 3500;
 
 export class GameRoom implements DurableObject {
   private room: StoredRoom | null = null;
@@ -121,9 +125,44 @@ export class GameRoom implements DurableObject {
     }
   }
 
-  async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _clean: boolean): Promise<void> {
-    // Do not remove the player — they may reconnect. Room idle cleanup is
-    // handled by `alarm()`.
+  async webSocketClose(ws: WebSocket, _code: number, _reason: string, _clean: boolean): Promise<void> {
+    if (!this.room) return;
+    const attachment = ws.deserializeAttachment() as SocketAttachment | null;
+    if (!attachment) return;
+    const { userId } = attachment;
+
+    // If another active socket still belongs to this user, treat as a
+    // replacement (see reconnect path in handleHello) — no state change.
+    for (const other of this.state.getWebSockets()) {
+      if (other === ws) continue;
+      const a = other.deserializeAttachment() as SocketAttachment | null;
+      if (a?.userId === userId) return;
+    }
+
+    if (this.room.status === 'in_progress') {
+      // Soft disconnect; keep the seat for reconnection.
+      this.broadcast({ kind: 'player_offline', userId });
+      return;
+    }
+
+    // Waiting state (pre-first-game OR post-game): the seat is given up.
+    if (!this.room.players[userId]) return;
+    delete this.room.players[userId];
+    this.broadcast({ kind: 'player_left', userId });
+
+    if (Object.keys(this.room.players).length === 0) {
+      await this.state.storage.deleteAll();
+      this.room = null;
+      return;
+    }
+
+    // When a player bails during the post-game rematch vote, reset the
+    // room to a fresh-first-game state for whoever remains. That way a
+    // brand-new joiner triggers auto-start rather than being blocked by
+    // the remaining player's stale ready flag.
+    for (const p of Object.values(this.room.players)) p.ready = false;
+    this.room.gamesPlayed = 0;
+    await this.persist();
   }
 
   async webSocketError(_ws: WebSocket, _err: unknown): Promise<void> {
@@ -221,12 +260,15 @@ export class GameRoom implements DurableObject {
 
     ws.serializeAttachment({ userId: claims.sub, name: claims.name });
 
-    // Broadcast joined (for new players). Send welcome to this socket always.
     if (!existing) {
+      // Brand new seat.
       this.broadcastExcept(claims.sub, {
         kind: 'player_joined',
-        player: { userId: claims.sub, name: claims.name, ready: false },
+        player: { userId: claims.sub, name: claims.name, ready: false, online: true },
       });
+    } else if (this.room.status === 'in_progress') {
+      // Reconnect during an active game.
+      this.broadcastExcept(claims.sub, { kind: 'player_online', userId: claims.sub });
     }
 
     this.send(ws, this.buildWelcome(claims.sub));
@@ -266,7 +308,9 @@ export class GameRoom implements DurableObject {
     const puzzles = await buildRound(this.env);
     this.room.puzzles = puzzles;
     this.room.status = 'in_progress';
-    this.room.startedAt = Date.now();
+    // Future-dated so both clients can cover image loading + countdown and
+    // then begin counting from the exact same wall-clock instant.
+    this.room.startedAt = Date.now() + START_COUNTDOWN_MS;
 
     this.broadcast({
       kind: 'game_start',
@@ -279,6 +323,8 @@ export class GameRoom implements DurableObject {
 
   private async handleClick(userId: string, puzzleIdx: number, x: number, y: number): Promise<void> {
     if (!this.room || this.room.status !== 'in_progress' || !this.room.puzzles) return;
+    // Reject clicks made during the pre-start countdown window.
+    if (this.room.startedAt && Date.now() < this.room.startedAt) return;
     const player = this.room.players[userId];
     if (!player || player.elapsedMs !== null) return;
 
@@ -370,13 +416,24 @@ export class GameRoom implements DurableObject {
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
+  private onlineUserIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const ws of this.state.getWebSockets()) {
+      const a = ws.deserializeAttachment() as SocketAttachment | null;
+      if (a?.userId) ids.add(a.userId);
+    }
+    return ids;
+  }
+
   private buildWelcome(forUserId: string): ServerMsg {
     if (!this.room) throw new Error('no room');
     const you = this.room.players[forUserId]!;
+    const online = this.onlineUserIds();
     const players = Object.values(this.room.players).map((p) => ({
       userId: p.userId,
       name: p.name,
       ready: p.ready,
+      online: online.has(p.userId),
       isYou: p.userId === forUserId,
     }));
     const puzzles: Puzzle[] | undefined = this.room.puzzles?.map((r) => r.puzzle);

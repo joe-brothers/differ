@@ -63,10 +63,20 @@ export class GameScene extends Container implements IScene {
   // Click handling — optimistic UI; server decides canonical truth
   private pendingClicks = 0;
 
+  // End-of-game state (set once game_end arrives)
+  private gameEnded = false;
+  private opponentOnline = true;
+
+  // When non-null, `update()` freezes the timer at this value. Used to show
+  // the server's final elapsedMs verbatim after game_end.
+  private timerFrozenAtSec: number | null = null;
+
   // Track off-screen WS handlers so we can detach on destroy
   private offClickResult?: () => void;
   private offGameEnd?: () => void;
   private offPlayerLeft?: () => void;
+  private offPlayerOffline?: () => void;
+  private offPlayerOnline?: () => void;
 
   constructor(app: Application) {
     super();
@@ -114,11 +124,21 @@ export class GameScene extends Container implements IScene {
 
     this.loadCurrentImage();
 
-    await this.countdownOverlay.play();
+    const state = gameState.getState();
+    const remaining = state.serverStartedAt
+      ? state.serverStartedAt - Date.now()
+      : 0;
+    if (remaining > 200) {
+      // Countdown is cosmetic; the authoritative start moment is
+      // state.serverStartedAt — both clients reveal the board at that
+      // instant regardless of their image-load / countdown variance.
+      this.countdownOverlay.play().catch(() => { /* swallow */ });
+      await new Promise((r) => setTimeout(r, remaining));
+      this.countdownOverlay.visible = false;
+    }
 
     this.placeholderContainer.removeChildren();
     this.gameArea.visible = true;
-    this.timer.start();
   }
 
   private setupLayout(): void {
@@ -259,21 +279,15 @@ export class GameScene extends Container implements IScene {
       this.playCelebration();
     });
 
+    // Completion is server-authoritative. On local completion we just pause
+    // the timer; the result screen appears when the server's `game_end`
+    // message arrives (handled in setupSocketListeners).
     gameState.on("gameCompleted", () => {
-      this.timer.pause();
-      const state = gameState.getState();
-      if (state.gameType === "one_on_one") {
-        this.gameCompleteScreen.showResult("win", state.elapsedTime, { playAgainLabel: "Rematch" });
-      } else {
-        // Solo: server writes the result on game_end; rank shown without
-        // rank number (leaderboard fetches it separately).
-        this.gameCompleteScreen.show(state.elapsedTime);
-      }
+      // no-op: timer now read-only from server state
     });
 
     gameState.on("gameLost", () => {
-      this.timer.pause();
-      this.gameCompleteScreen.showResult("lose", gameState.getState().elapsedTime, { playAgainLabel: "Rematch" });
+      // no-op: timer now read-only from server state
     });
 
     gameState.on("imageChanged", (index: number) => {
@@ -285,15 +299,11 @@ export class GameScene extends Container implements IScene {
     gameState.on("inputDisabled", () => this.setInputEnabled(false));
     gameState.on("inputEnabled", () => this.setInputEnabled(true));
 
-    gameState.on("modeChanged", (mode) => {
-      if (mode === "paused") this.timer.pause();
-      else if (mode === "playing") this.timer.start();
-    });
+    // Timer is now server-driven (see update()); modeChanged just governs
+    // input via other listeners.
 
-    gameState.on("opponentDifferenceFound", (count: number) => {
-      if (this.opponentProgressText) {
-        this.opponentProgressText.text = `Opponent ${count}/${TOTAL_DIFFS_PER_GAME}`;
-      }
+    gameState.on("opponentDifferenceFound", () => {
+      this.refreshOpponentText();
     });
   }
 
@@ -322,23 +332,78 @@ export class GameScene extends Container implements IScene {
       }
     };
 
-    const onEnd = (msg: { winnerId: string | null }) => {
+    const onEnd = (msg: {
+      winnerId: string | null;
+      results: { userId: string; name: string; elapsedMs: number | null; foundCount: number }[];
+    }) => {
+      this.gameEnded = true;
+      const state = gameState.getState();
+
       if (msg.winnerId && msg.winnerId !== myId) {
         gameState.handleGameEnded(msg.winnerId);
       }
+
+      const mine = msg.results.find((r) => r.userId === myId);
+      const myElapsedSec = mine?.elapsedMs != null ? mine.elapsedMs / 1000 : 0;
+      this.timerFrozenAtSec = myElapsedSec;
+
+      if (state.gameType === "one_on_one") {
+        const isWin = msg.winnerId === myId;
+        this.gameCompleteScreen.showResult(
+          isWin ? "win" : "lose",
+          myElapsedSec,
+          { playAgainLabel: "Rematch" },
+        );
+      } else {
+        this.gameCompleteScreen.show(myElapsedSec);
+      }
     };
 
-    const onLeft = () => {
-      // In 1v1, treat as automatic win? For now surface a message but
-      // server may still send game_end soon.
+    const onLeft = (msg: { userId: string }) => {
+      if (msg.userId === myId) return;
+      if (this.gameEnded) {
+        // Post-game opponent bailed to lobby; keep the room open and show
+        // the waiting-for-opponent UI with the same code.
+        game.rejoinWaitingRoom(gameState.getState().roomCode);
+      }
+    };
+
+    const onOffline = (msg: { userId: string }) => {
+      if (msg.userId === myId) return;
+      this.setOpponentOnline(false);
+    };
+    const onOnline = (msg: { userId: string }) => {
+      if (msg.userId === myId) return;
+      this.setOpponentOnline(true);
     };
 
     socket.on("click_result", onClick);
     socket.on("game_end", onEnd);
     socket.on("player_left", onLeft);
+    socket.on("player_offline", onOffline);
+    socket.on("player_online", onOnline);
     this.offClickResult = () => socket.off("click_result", onClick);
     this.offGameEnd = () => socket.off("game_end", onEnd);
     this.offPlayerLeft = () => socket.off("player_left", onLeft);
+    this.offPlayerOffline = () => socket.off("player_offline", onOffline);
+    this.offPlayerOnline = () => socket.off("player_online", onOnline);
+  }
+
+  private setOpponentOnline(online: boolean): void {
+    this.opponentOnline = online;
+    this.refreshOpponentText();
+  }
+
+  private refreshOpponentText(): void {
+    if (!this.opponentProgressText) return;
+    const state = gameState.getState();
+    const base = `Opponent ${state.opponentFoundCount}/${TOTAL_DIFFS_PER_GAME}`;
+    this.opponentProgressText.text = this.opponentOnline
+      ? base
+      : `${base} (Disconnected)`;
+    this.opponentProgressText.style.fill = this.opponentOnline
+      ? COLORS.textSecondary
+      : COLORS.error;
   }
 
   private loadCurrentImage(): void {
@@ -515,12 +580,15 @@ export class GameScene extends Container implements IScene {
     this.menuOverlay.hide();
   }
 
-  update(deltaTime: number): void {
-    const state = gameState.getState();
-    if (state.mode === "playing") {
-      this.timer.update(deltaTime);
-      gameState.updateTime(deltaTime);
+  update(_deltaTime: number): void {
+    if (this.timerFrozenAtSec != null) {
+      this.timer.setTime(this.timerFrozenAtSec);
+      return;
     }
+    const state = gameState.getState();
+    if (!state.serverStartedAt) return;
+    const elapsedSec = Math.max(0, (Date.now() - state.serverStartedAt) / 1000);
+    this.timer.setTime(elapsedSec);
   }
 
   resize(width: number, height: number): void {
@@ -549,6 +617,8 @@ export class GameScene extends Container implements IScene {
     this.offClickResult?.();
     this.offGameEnd?.();
     this.offPlayerLeft?.();
+    this.offPlayerOffline?.();
+    this.offPlayerOnline?.();
 
     gameState.removeAllListeners();
     this.removeAllListeners();

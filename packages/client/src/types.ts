@@ -35,11 +35,13 @@ export interface GameState {
   mode: GameMode;
   gameType: GameType;
   roomCode: string;
+  // Server-authoritative wall-clock when active play begins. May be in the
+  // future during the initial countdown window.
+  serverStartedAt: number | null;
   currentImageIndex: number;
   selectedImages: ImageData[];
   selectedDifferences: SelectedDifference[][];
   foundCount: number;
-  elapsedTime: number;
   inputDisabled: boolean;
   opponentFoundCount: number;
   opponentUsername: string;
