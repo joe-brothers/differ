@@ -18,6 +18,8 @@ interface UIStore {
   currentImageIndex: number;
   opponentFoundCount: number;
   opponentOnline: boolean;
+  opponentName: string;
+  opponentWins: number;
   gameType: GameType;
   timerSec: number;
 
@@ -63,6 +65,8 @@ export const useUIStore = create<UIStore>((set) => ({
   currentImageIndex: 0,
   opponentFoundCount: 0,
   opponentOnline: true,
+  opponentName: "",
+  opponentWins: 0,
   gameType: "single",
   timerSec: 0,
   modal: { type: "none" },
@@ -77,6 +81,8 @@ export const useUIStore = create<UIStore>((set) => ({
       currentImageIndex: s.currentImageIndex,
       opponentFoundCount: s.opponentFoundCount,
       opponentOnline: true,
+      opponentName: s.opponentUsername,
+      opponentWins: s.opponentWins,
       gameType: s.gameType,
       timerSec: 0,
       modal: { type: "none" },

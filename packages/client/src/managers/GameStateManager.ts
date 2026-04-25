@@ -23,6 +23,7 @@ export class GameStateManager extends EventEmitter {
       inputDisabled: false,
       opponentFoundCount: 0,
       opponentUsername: "",
+      opponentWins: 0,
       pausedAt: null,
       pausedMs: 0,
     };
@@ -47,6 +48,7 @@ export class GameStateManager extends EventEmitter {
     existingOpponentCount: number = 0,
   ): void {
     const prevOpponentName = this.state.opponentUsername;
+    const prevOpponentWins = this.state.opponentWins;
     this.state = {
       mode: "playing",
       gameType,
@@ -59,6 +61,7 @@ export class GameStateManager extends EventEmitter {
       inputDisabled: false,
       opponentFoundCount: existingOpponentCount,
       opponentUsername: prevOpponentName,
+      opponentWins: prevOpponentWins,
       pausedAt: null,
       pausedMs: 0,
     };
@@ -116,8 +119,9 @@ export class GameStateManager extends EventEmitter {
     this.emit("gameLost", winnerUserId);
   }
 
-  setOpponentUsername(username: string): void {
+  setOpponent(username: string, wins: number): void {
     this.state.opponentUsername = username;
+    this.state.opponentWins = wins;
   }
 
   navigateToImage(index: number): void {

@@ -2,7 +2,9 @@ import type { Context } from "hono";
 import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 
 export const TOKEN_COOKIE = "differ_token";
+export const DEVICE_COOKIE = "differ_device_id";
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 days
+const DEVICE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60; // 1 year
 
 // Cross-origin (cookie omitted) safety net: many browsers reject SameSite=Lax
 // cookies on cross-site fetches. We assume same-origin deploys (Vite proxy in
@@ -36,4 +38,21 @@ export function readTokenFromRequest(req: Request): string | null {
     if (name === TOKEN_COOKIE) return rest.join("=");
   }
   return null;
+}
+
+// Device cookie: long-lived, survives logout. Used to re-bind a returning
+// guest to their original guest user record so they don't accumulate
+// throwaway accounts every time they log out.
+export function setDeviceCookie(c: Context, deviceId: string): void {
+  setCookie(c, DEVICE_COOKIE, deviceId, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Lax",
+    path: "/",
+    maxAge: DEVICE_MAX_AGE_SECONDS,
+  });
+}
+
+export function readDeviceCookie(c: Context): string | undefined {
+  return getCookie(c, DEVICE_COOKIE);
 }

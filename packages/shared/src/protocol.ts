@@ -44,6 +44,9 @@ export const RoomPlayer = z.object({
   ready: z.boolean(),
   online: z.boolean(),
   isYou: z.boolean().optional(),
+  // 1v1 wins to date for this user. Shown next to the opponent's name in
+  // the lobby/HUD so people get a feel for who they're playing.
+  wins: z.number().int().min(0).default(0),
 });
 export type RoomPlayer = z.infer<typeof RoomPlayer>;
 

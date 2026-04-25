@@ -24,6 +24,8 @@ export function GameHud() {
   const currentImageIndex = useUIStore((s) => s.currentImageIndex);
   const opponentFoundCount = useUIStore((s) => s.opponentFoundCount);
   const opponentOnline = useUIStore((s) => s.opponentOnline);
+  const opponentName = useUIStore((s) => s.opponentName);
+  const opponentWins = useUIStore((s) => s.opponentWins);
   const gameType = useUIStore((s) => s.gameType);
 
   if (!hudVisible) return null;
@@ -102,8 +104,15 @@ export function GameHud() {
               background: opponentOnline ? CSS.success : CSS.error,
             }}
           />
-          <span>
-            Opponent {opponentFoundCount}/{TOTAL_DIFFS_PER_GAME}
+          <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+            <span>
+              {opponentName || "Opponent"} {opponentFoundCount}/{TOTAL_DIFFS_PER_GAME}
+            </span>
+            {opponentName && (
+              <span style={{ color: CSS.textSecondary, fontSize: 11, fontWeight: 400 }}>
+                {opponentWins} win{opponentWins === 1 ? "" : "s"}
+              </span>
+            )}
           </span>
           {!opponentOnline && <span style={{ color: CSS.error }}>(Disconnected)</span>}
         </div>

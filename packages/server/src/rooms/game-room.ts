@@ -3,9 +3,11 @@ import {
   ServerMsg,
   type GameMode,
   type Puzzle,
+  type RoomPlayer,
   PUZZLES_PER_GAME,
   DIFFS_PER_PUZZLE,
 } from "@differ/shared";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Env } from "../env.js";
 import { verifyToken } from "../auth/jwt.js";
 import { getDb } from "../db/client.js";
@@ -337,18 +339,26 @@ export class GameRoom implements DurableObject {
       }
     }
 
+    const wins = await this.fetchWins(Object.keys(this.room.players));
+
     if (!existing) {
       // Brand new seat.
       this.broadcastExcept(userId, {
         kind: "player_joined",
-        player: { userId, name, ready: false, online: true },
+        player: {
+          userId,
+          name,
+          ready: false,
+          online: true,
+          wins: wins.get(userId) ?? 0,
+        },
       });
     } else if (this.room.status === "in_progress") {
       // Reconnect during an active game.
       this.broadcastExcept(userId, { kind: "player_online", userId });
     }
 
-    this.send(ws, this.buildWelcome(userId));
+    this.send(ws, this.buildWelcome(userId, wins));
     this.bumpActivity();
     await this.persist();
 
@@ -527,16 +537,17 @@ export class GameRoom implements DurableObject {
     return ids;
   }
 
-  private buildWelcome(forUserId: string): ServerMsg {
+  private buildWelcome(forUserId: string, wins: Map<string, number>): ServerMsg {
     if (!this.room) throw new Error("no room");
     const you = this.room.players[forUserId]!;
     const online = this.onlineUserIds();
-    const players = Object.values(this.room.players).map((p) => ({
+    const players: RoomPlayer[] = Object.values(this.room.players).map((p) => ({
       userId: p.userId,
       name: p.name,
       ready: p.ready,
       online: online.has(p.userId),
       isYou: p.userId === forUserId,
+      wins: wins.get(p.userId) ?? 0,
     }));
     const puzzles: Puzzle[] | undefined = this.room.puzzles?.map((r) => r.puzzle);
     const yourFound = Object.entries(you.foundPerPuzzle).map(([idx, diffIds]) => ({
@@ -587,6 +598,23 @@ export class GameRoom implements DurableObject {
 
   private bumpActivity(): void {
     if (this.room) this.room.lastActivityAt = Date.now();
+  }
+
+  // Aggregate 1v1 wins for the given users. Used to decorate RoomPlayer
+  // payloads so opponents can see each other's track record.
+  private async fetchWins(userIds: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (userIds.length === 0) return out;
+    const db = getDb(this.env.DB);
+    const rows = await db
+      .select({ userId: gameResults.userId, c: sql<number>`COUNT(*)` })
+      .from(gameResults)
+      .where(and(eq(gameResults.mode, "1v1"), inArray(gameResults.userId, userIds)))
+      .groupBy(gameResults.userId)
+      .all();
+    for (const r of rows) out.set(r.userId, Number(r.c) || 0);
+    for (const id of userIds) if (!out.has(id)) out.set(id, 0);
+    return out;
   }
 
   private isClickRateLimited(userId: string): boolean {

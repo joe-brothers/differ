@@ -10,12 +10,14 @@ export const users = sqliteTable(
     passwordHash: text("password_hash"),
     email: text("email").unique(),
     isGuest: integer("is_guest").notNull().default(1),
+    deviceId: text("device_id"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(datetime('now'))`),
   },
   (t) => ({
     usernameIdx: index("idx_users_username").on(t.username),
+    deviceIdx: index("idx_users_device_id").on(t.deviceId),
   }),
 );
 

@@ -13,6 +13,7 @@ export class MatchmakingScene extends Container implements IScene {
   private statusText: Text | null = null;
   private roomCode: string | null = null;
   private cancelled = false;
+  private opponentEl: HTMLDivElement | null = null;
 
   constructor(app: Application) {
     super();
@@ -52,6 +53,7 @@ export class MatchmakingScene extends Container implements IScene {
     this.overlay = new HtmlOverlay();
     this.statusText?.destroy();
     this.statusText = null;
+    this.opponentEl = null;
   }
 
   private showChooser(): void {
@@ -147,6 +149,17 @@ export class MatchmakingScene extends Container implements IScene {
     });
     card.appendChild(hint);
 
+    // Slot for opponent info, populated when player_joined arrives.
+    this.opponentEl = document.createElement("div");
+    Object.assign(this.opponentEl.style, {
+      color: "#202124",
+      fontSize: "14px",
+      textAlign: "center",
+      margin: "8px 0 0 0",
+      minHeight: "20px",
+    });
+    card.appendChild(this.opponentEl);
+
     const cancelBtn = this.overlay!.createSecondaryButton(card, "Cancel");
     cancelBtn.addEventListener("click", () => {
       this.cancelled = true;
@@ -154,6 +167,19 @@ export class MatchmakingScene extends Container implements IScene {
     });
 
     return { codeEl, hint };
+  }
+
+  // Populate the opponent line under the room code (or "Joined" header).
+  private renderOpponent(name: string, wins: number): void {
+    if (!this.opponentEl) return;
+    this.opponentEl.innerHTML = "";
+    const label = document.createElement("span");
+    label.textContent = `Opponent: ${name} `;
+    const winsBadge = document.createElement("span");
+    winsBadge.textContent = `· ${wins} win${wins === 1 ? "" : "s"}`;
+    Object.assign(winsBadge.style, { color: "#5F6368" });
+    this.opponentEl.appendChild(label);
+    this.opponentEl.appendChild(winsBadge);
   }
 
   private showJoinForm(): void {
@@ -239,6 +265,16 @@ export class MatchmakingScene extends Container implements IScene {
     });
     card.appendChild(info);
 
+    this.opponentEl = document.createElement("div");
+    Object.assign(this.opponentEl.style, {
+      color: "#202124",
+      fontSize: "14px",
+      textAlign: "center",
+      margin: "0 0 12px 0",
+      minHeight: "20px",
+    });
+    card.appendChild(this.opponentEl);
+
     const cancelBtn = this.overlay.createSecondaryButton(card, "Leave");
     cancelBtn.addEventListener("click", () => {
       this.cancelled = true;
@@ -255,13 +291,20 @@ export class MatchmakingScene extends Container implements IScene {
     if (!socket) return;
     const myId = authState.getUser()?.userId;
 
-    socket.on("welcome", (msg: { players: { userId: string; name: string }[] }) => {
+    socket.on("welcome", (msg: { players: { userId: string; name: string; wins: number }[] }) => {
       const other = msg.players.find((p) => p.userId !== myId);
-      if (other) gameState.setOpponentUsername(other.name);
+      if (other) {
+        gameState.setOpponent(other.name, other.wins);
+        this.renderOpponent(other.name, other.wins);
+      }
     });
-    socket.on("player_joined", (msg: { player: { userId: string; name: string } }) => {
-      gameState.setOpponentUsername(msg.player.name);
-    });
+    socket.on(
+      "player_joined",
+      (msg: { player: { userId: string; name: string; wins: number } }) => {
+        gameState.setOpponent(msg.player.name, msg.player.wins);
+        this.renderOpponent(msg.player.name, msg.player.wins);
+      },
+    );
     socket.on("error", (msg: { message: string }) => {
       console.warn("room error", msg.message);
     });

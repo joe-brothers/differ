@@ -246,7 +246,7 @@ export class Game {
     const myFoundCount = differences.reduce((n, arr) => n + arr.filter((d) => d.found).length, 0);
     const opponentCount = welcome.progress?.find((p) => p.userId !== myId)?.foundCount ?? 0;
     const opponent = welcome.players.find((p) => p.userId !== myId);
-    if (opponent) gameState.setOpponentUsername(opponent.name);
+    if (opponent) gameState.setOpponent(opponent.name, opponent.wins);
 
     gameState.initGame(
       roomCode,

@@ -8,7 +8,7 @@ import { signToken } from "./jwt.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { requireAuth, type AuthEnv } from "./middleware.js";
 import { checkRateLimit, guestKey, loginKey, upgradeKey } from "./rate-limit.js";
-import { setTokenCookie, clearTokenCookie } from "./cookie.js";
+import { setTokenCookie, clearTokenCookie, setDeviceCookie, readDeviceCookie } from "./cookie.js";
 import { verifyTurnstile } from "./turnstile.js";
 
 function clientIp(c: { req: { header: (h: string) => string | undefined } }): string | undefined {
@@ -42,16 +42,46 @@ authRoutes.post("/guest", async (c) => {
   if (!ts.ok) {
     return c.json({ error: { code: "captcha_failed", message: "Captcha required" } }, 400);
   }
+
+  const db = getDb(c.env.DB);
+
+  // If the device cookie matches an existing guest user, re-bind to it.
+  // We only reuse guest accounts — once the user upgraded with credentials,
+  // they're expected to sign in with username/password.
+  const existingDeviceId = readDeviceCookie(c);
+  if (existingDeviceId) {
+    const existing = await db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .where(and(eq(users.deviceId, existingDeviceId), eq(users.isGuest, 1)))
+      .get();
+    if (existing) {
+      const token = await signToken(c.env.JWT_SECRET, c.env.JWT_ISSUER, {
+        userId: existing.id,
+        name: existing.name,
+        isGuest: true,
+      });
+      setTokenCookie(c, token);
+      const body: AuthRes = {
+        user: { userId: existing.id, name: existing.name, isGuest: true },
+      };
+      return c.json(body);
+    }
+  }
+
+  // First-time visitor (or device cookie went stale). Mint a new guest +
+  // device id. Store both in the cookie jar; logout clears only the token.
   const userId = genUserId();
   const name = randomGuestName();
-  const db = getDb(c.env.DB);
-  await db.insert(users).values({ id: userId, name, isGuest: 1 }).run();
+  const deviceId = existingDeviceId ?? crypto.randomUUID();
+  await db.insert(users).values({ id: userId, name, isGuest: 1, deviceId }).run();
   const token = await signToken(c.env.JWT_SECRET, c.env.JWT_ISSUER, {
     userId,
     name,
     isGuest: true,
   });
   setTokenCookie(c, token);
+  setDeviceCookie(c, deviceId);
   const body: AuthRes = { user: { userId, name, isGuest: true } };
   return c.json(body);
 });
