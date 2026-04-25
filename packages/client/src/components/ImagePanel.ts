@@ -1,10 +1,4 @@
-import {
-  Container,
-  Sprite,
-  Graphics,
-  Texture,
-  FederatedPointerEvent,
-} from "pixi.js";
+import { Container, Sprite, Graphics, Texture, FederatedPointerEvent } from "pixi.js";
 import type { SelectedDifference } from "../types";
 import { IMAGE_WIDTH, IMAGE_HEIGHT } from "../constants";
 import { DiffMarker } from "./DiffMarker";

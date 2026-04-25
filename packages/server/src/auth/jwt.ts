@@ -1,5 +1,5 @@
-import jwt from '@tsndr/cloudflare-worker-jwt';
-import type { JwtClaims } from '../env.js';
+import jwt from "@tsndr/cloudflare-worker-jwt";
+import type { JwtClaims } from "../env.js";
 
 const TOKEN_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
 

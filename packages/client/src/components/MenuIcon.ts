@@ -25,12 +25,7 @@ export class MenuIcon extends Container {
     const startY = (size - lineHeight * 3 - gap * 2) / 2;
 
     for (let i = 0; i < 3; i++) {
-      icon.rect(
-        padding,
-        startY + i * (lineHeight + gap),
-        lineWidth,
-        lineHeight,
-      );
+      icon.rect(padding, startY + i * (lineHeight + gap), lineWidth, lineHeight);
     }
     icon.fill(COLORS.text);
     this.addChild(icon);

@@ -10,7 +10,11 @@ import type {
 import { API_BASE_URL } from "../constants";
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string) {
+  constructor(
+    public status: number,
+    public code: string,
+    message: string,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -37,11 +41,7 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
 
   if (!res.ok) {
     const err = (json as { error?: { code?: string; message?: string } } | null)?.error;
-    throw new ApiError(
-      res.status,
-      err?.code ?? "unknown",
-      err?.message ?? res.statusText,
-    );
+    throw new ApiError(res.status, err?.code ?? "unknown", err?.message ?? res.statusText);
   }
   return json as T;
 }

@@ -1,12 +1,15 @@
-import { z } from 'zod';
-import { sql } from 'drizzle-orm';
+import { z } from "zod";
+import { sql } from "drizzle-orm";
 import {
-  Puzzle, RectArea,
-  PUZZLES_PER_GAME, DIFFS_PER_PUZZLE, PUZZLE_CANDIDATE_COUNT,
-} from '@differ/shared';
-import type { Env } from '../env.js';
-import { getDb } from '../db/client.js';
-import { puzzles } from '../db/schema.js';
+  Puzzle,
+  RectArea,
+  PUZZLES_PER_GAME,
+  DIFFS_PER_PUZZLE,
+  PUZZLE_CANDIDATE_COUNT,
+} from "@differ/shared";
+import type { Env } from "../env.js";
+import { getDb } from "../db/client.js";
+import { puzzles } from "../db/schema.js";
 
 const StoredDifferences = z.array(RectArea);
 
@@ -20,9 +23,9 @@ export interface LoadedPuzzle {
 
 // Per-round selection: 5 puzzles × 5 chosen diffs each.
 export interface RoundPuzzle {
-  puzzle: Puzzle;                    // public view (only selected diffs)
-  selectedDiffIds: string[];         // stable ordering
-  allDiffs: RectArea[];              // server authority for click validation
+  puzzle: Puzzle; // public view (only selected diffs)
+  selectedDiffIds: string[]; // stable ordering
+  allDiffs: RectArea[]; // server authority for click validation
 }
 
 function shuffle<T>(arr: T[]): T[] {

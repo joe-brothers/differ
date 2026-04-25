@@ -11,7 +11,7 @@ CDN_BASE = "https://differ-assets.joe-brothers.com"
 [[d1_databases]]
 binding = "DB"
 database_name = "differ"
-database_id = "00000000-0000-0000-0000-000000000000"   # replaced on `wrangler d1 create differ`
+database_id = "00000000-0000-0000-0000-000000000000" # replaced on `wrangler d1 create differ`
 migrations_dir = "src/db/migrations"
 
 [[durable_objects.bindings]]

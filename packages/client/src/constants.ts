@@ -1,7 +1,6 @@
 // Server configuration
 export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  "http://127.0.0.1:8787";
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://127.0.0.1:8787";
 
 // CDN and image configuration
 export const CDN_BASE = "https://differ-assets.joe-brothers.com";

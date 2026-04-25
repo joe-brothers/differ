@@ -1,0 +1,59 @@
+amends "package://github.com/jdx/hk/releases/download/v1.43.0/hk@1.43.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.43.0/hk@1.43.0#/Builtins.pkl"
+
+local oxfmt = new Step {
+  glob = List(
+    "**/*.js",
+    "**/*.jsx",
+    "**/*.mjs",
+    "**/*.cjs",
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.mts",
+    "**/*.cts",
+    "**/*.json",
+    "**/*.jsonc",
+    "**/*.json5",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.md",
+    "**/*.mdx",
+    "**/*.css",
+    "**/*.scss",
+    "**/*.less",
+    "**/*.html",
+    "**/*.toml",
+    "**/*.graphql",
+  )
+  batch = true
+  check = "pnpm exec oxfmt --check --no-error-on-unmatched-pattern {{ files }}"
+  fix = "pnpm exec oxfmt --write --no-error-on-unmatched-pattern {{ files }}"
+}
+
+local allSteps = new Mapping<String, Step> {
+  ["oxfmt"] = oxfmt
+  ["oxlint"] = (Builtins.ox_lint) {
+    check = "pnpm exec oxlint {{ files }}"
+    fix = "pnpm exec oxlint --fix {{ files }}"
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = allSteps
+  }
+  ["pre-push"] {
+    fix = false
+    steps = allSteps
+  }
+  ["check"] {
+    fix = false
+    steps = allSteps
+  }
+  ["fix"] {
+    fix = true
+    steps = allSteps
+  }
+}

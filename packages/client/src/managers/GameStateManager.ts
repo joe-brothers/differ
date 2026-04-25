@@ -1,11 +1,5 @@
 import { EventEmitter } from "pixi.js";
-import type {
-  GameState,
-  GameMode,
-  GameType,
-  ImageData,
-  SelectedDifference,
-} from "../types";
+import type { GameState, GameMode, GameType, ImageData, SelectedDifference } from "../types";
 import { IMAGES_PER_GAME, TOTAL_DIFFS_PER_GAME } from "../constants";
 
 export class GameStateManager extends EventEmitter {

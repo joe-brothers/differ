@@ -1,15 +1,21 @@
 {
   "name": "differ",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev:server": "pnpm -F @differ/server dev",
     "dev:client": "pnpm -F @differ/client dev",
     "typecheck": "pnpm -r typecheck",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt --write",
+    "format:check": "oxfmt --check"
   },
   "devDependencies": {
+    "oxfmt": "0.45.0",
+    "oxlint": "1.60.0",
     "typescript": "^5.6.3"
   },
   "engines": {

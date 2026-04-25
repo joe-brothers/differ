@@ -80,7 +80,6 @@ export class NavButtons extends Container {
 
     // Disable next if at last image
     this.nextButton.alpha = currentIndex < totalImages - 1 ? 1 : 0.5;
-    this.nextButton.eventMode =
-      currentIndex < totalImages - 1 ? "static" : "none";
+    this.nextButton.eventMode = currentIndex < totalImages - 1 ? "static" : "none";
   }
 }

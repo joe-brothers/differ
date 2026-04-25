@@ -1,28 +1,28 @@
-import { Hono } from 'hono';
-import { asc, count, desc, eq, min } from 'drizzle-orm';
-import { LeaderboardQuery, type LeaderboardRes } from '@differ/shared';
-import type { Env } from '../env.js';
-import { getDb } from '../db/client.js';
-import { gameResults, users } from '../db/schema.js';
+import { Hono } from "hono";
+import { asc, count, desc, eq, min } from "drizzle-orm";
+import { LeaderboardQuery, type LeaderboardRes } from "@differ/shared";
+import type { Env } from "../env.js";
+import { getDb } from "../db/client.js";
+import { gameResults, users } from "../db/schema.js";
 
 export const leaderboardRoutes = new Hono<{ Bindings: Env }>();
 
 // A row in `game_results` represents a win (losers are never inserted), so
 // the leaderboard is a simple COUNT aggregation keyed by mode.
-leaderboardRoutes.get('/', async (c) => {
+leaderboardRoutes.get("/", async (c) => {
   const parsed = LeaderboardQuery.safeParse({
-    mode: c.req.query('mode'),
-    limit: c.req.query('limit'),
-    offset: c.req.query('offset'),
+    mode: c.req.query("mode"),
+    limit: c.req.query("limit"),
+    offset: c.req.query("offset"),
   });
   if (!parsed.success) {
-    return c.json({ error: { code: 'bad_request', message: parsed.error.message } }, 400);
+    return c.json({ error: { code: "bad_request", message: parsed.error.message } }, 400);
   }
   const { mode, limit, offset } = parsed.data;
 
   const db = getDb(c.env.DB);
-  const wins = count().as('wins');
-  const bestMs = min(gameResults.elapsedMs).as('best_ms');
+  const wins = count().as("wins");
+  const bestMs = min(gameResults.elapsedMs).as("best_ms");
 
   const results = await db
     .select({

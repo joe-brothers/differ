@@ -1,5 +1,7 @@
 [tools]
 node = "25"
+hk = "1.43"
+pkl = "0.31"
 
 [hooks]
 # Enabling corepack will install the `pnpm` package manager specified in your package.json

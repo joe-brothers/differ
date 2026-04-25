@@ -35,10 +35,7 @@ export class LeaderboardScene extends Container implements IScene {
       },
     });
     this.loadingText.anchor.set(0.5);
-    this.loadingText.position.set(
-      this.app.screen.width / 2,
-      this.app.screen.height / 2,
-    );
+    this.loadingText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
     this.addChild(this.loadingText);
 
     await this.loadMode(this.currentMode);
@@ -82,12 +79,7 @@ export class LeaderboardScene extends Container implements IScene {
     this.highlightTabs();
   }
 
-  private makeTab(
-    label: string,
-    w: number,
-    h: number,
-    onClick: () => void,
-  ): Container {
+  private makeTab(label: string, w: number, h: number, onClick: () => void): Container {
     const button = new Container();
     const bg = new Graphics();
     bg.roundRect(-w / 2, -h / 2, w, h, 8);
@@ -240,7 +232,9 @@ export class LeaderboardScene extends Container implements IScene {
     }
   }
 
-  update(): void { /* no-op */ }
+  update(): void {
+    /* no-op */
+  }
 
   resize(_width: number, _height: number): void {
     // Simplified - would need to reposition elements

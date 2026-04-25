@@ -32,10 +32,18 @@ function readActiveRoom(): PersistedRoom | null {
   }
 }
 function writeActiveRoom(roomCode: string, gameType: GameType): void {
-  try { localStorage.setItem(ACTIVE_ROOM_KEY, JSON.stringify({ roomCode, gameType })); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(ACTIVE_ROOM_KEY, JSON.stringify({ roomCode, gameType }));
+  } catch {
+    /* ignore */
+  }
 }
 function clearActiveRoom(): void {
-  try { localStorage.removeItem(ACTIVE_ROOM_KEY); } catch { /* ignore */ }
+  try {
+    localStorage.removeItem(ACTIVE_ROOM_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export class Game {
@@ -189,11 +197,7 @@ export class Game {
     // progress for this socket's user (i.e. we were already a player and
     // reconnected), hydrate from the welcome payload and mount GameScene.
     socket.on("welcome", async (msg: ServerWelcome) => {
-      if (
-        msg.status === "in_progress" &&
-        msg.puzzles &&
-        msg.startedAt != null
-      ) {
+      if (msg.status === "in_progress" && msg.puzzles && msg.startedAt != null) {
         await this.mountResumedGame(roomCode, gameType, msg);
       }
     });
@@ -242,12 +246,8 @@ export class Game {
     }
 
     const myId = authState.getUser()?.userId;
-    const myFoundCount = differences.reduce(
-      (n, arr) => n + arr.filter((d) => d.found).length,
-      0,
-    );
-    const opponentCount =
-      welcome.progress?.find((p) => p.userId !== myId)?.foundCount ?? 0;
+    const myFoundCount = differences.reduce((n, arr) => n + arr.filter((d) => d.found).length, 0);
+    const opponentCount = welcome.progress?.find((p) => p.userId !== myId)?.foundCount ?? 0;
     const opponent = welcome.players.find((p) => p.userId !== myId);
     if (opponent) gameState.setOpponentUsername(opponent.name);
 

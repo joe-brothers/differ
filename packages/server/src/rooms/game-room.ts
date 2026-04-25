@@ -1,15 +1,18 @@
 import {
-  ClientMsg, ServerMsg,
-  type GameMode, type Puzzle,
-  PUZZLES_PER_GAME, DIFFS_PER_PUZZLE,
-} from '@differ/shared';
-import type { Env } from '../env.js';
-import { verifyToken } from '../auth/jwt.js';
-import { getDb } from '../db/client.js';
-import { gameResults } from '../db/schema.js';
-import { buildRound, findHit, type RoundPuzzle } from '../puzzles/service.js';
+  ClientMsg,
+  ServerMsg,
+  type GameMode,
+  type Puzzle,
+  PUZZLES_PER_GAME,
+  DIFFS_PER_PUZZLE,
+} from "@differ/shared";
+import type { Env } from "../env.js";
+import { verifyToken } from "../auth/jwt.js";
+import { getDb } from "../db/client.js";
+import { gameResults } from "../db/schema.js";
+import { buildRound, findHit, type RoundPuzzle } from "../puzzles/service.js";
 
-type RoomStatus = 'waiting' | 'in_progress' | 'ended';
+type RoomStatus = "waiting" | "in_progress" | "ended";
 
 interface StoredPlayer {
   userId: string;
@@ -24,11 +27,11 @@ interface StoredRoom {
   mode: GameMode;
   status: RoomStatus;
   players: Record<string, StoredPlayer>; // keyed by userId
-  puzzles: RoundPuzzle[] | null;         // null until game_start
+  puzzles: RoundPuzzle[] | null; // null until game_start
   startedAt: number | null;
   createdAt: number;
   winnerId: string | null;
-  gamesPlayed: number;                   // 0 = first game (auto-start); >0 = rematch (both must ready)
+  gamesPlayed: number; // 0 = first game (auto-start); >0 = rematch (both must ready)
 }
 
 interface SocketAttachment {
@@ -36,8 +39,8 @@ interface SocketAttachment {
   name: string;
 }
 
-const ROOM_IDLE_TIMEOUT_MS = 30 * 60 * 1000;    // 30 min
-const GAME_TIMEOUT_MS = 10 * 60 * 1000;         // 10 min hard cap
+const ROOM_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
+const GAME_TIMEOUT_MS = 10 * 60 * 1000; // 10 min hard cap
 // Delay between game_start broadcast and actual play start, to cover
 // per-client image loading + countdown so both clients begin at the same
 // wall-clock moment. The client counts down to `startedAt`.
@@ -51,7 +54,7 @@ export class GameRoom implements DurableObject {
     private readonly env: Env,
   ) {
     this.state.blockConcurrencyWhile(async () => {
-      const stored = await this.state.storage.get<StoredRoom>('room');
+      const stored = await this.state.storage.get<StoredRoom>("room");
       if (stored) this.room = stored;
     });
   }
@@ -61,73 +64,78 @@ export class GameRoom implements DurableObject {
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
 
-    if (url.pathname === '/__init__' && req.method === 'POST') {
+    if (url.pathname === "/__init__" && req.method === "POST") {
       const body = await req.json<{ roomCode: string; mode: GameMode; createdBy: string }>();
       return this.initRoom(body.roomCode, body.mode);
     }
 
-    const upgrade = req.headers.get('Upgrade');
-    if (upgrade?.toLowerCase() === 'websocket') {
-      if (!this.room) return new Response('Room not initialized', { status: 404 });
+    const upgrade = req.headers.get("Upgrade");
+    if (upgrade?.toLowerCase() === "websocket") {
+      if (!this.room) return new Response("Room not initialized", { status: 404 });
       const pair = new WebSocketPair();
       const [client, server] = [pair[0], pair[1]];
       this.state.acceptWebSocket(server);
       return new Response(null, { status: 101, webSocket: client });
     }
 
-    return new Response('Not Found', { status: 404 });
+    return new Response("Not Found", { status: 404 });
   }
 
   // ─── Hibernatable WS callbacks ───────────────────────────────────────────
 
   async webSocketMessage(ws: WebSocket, data: ArrayBuffer | string): Promise<void> {
     if (!this.room) {
-      this.sendError(ws, 'no_room', 'Room no longer exists');
-      ws.close(1011, 'no_room');
+      this.sendError(ws, "no_room", "Room no longer exists");
+      ws.close(1011, "no_room");
       return;
     }
     let parsed;
     try {
-      const json = typeof data === 'string' ? data : new TextDecoder().decode(data);
+      const json = typeof data === "string" ? data : new TextDecoder().decode(data);
       parsed = ClientMsg.safeParse(JSON.parse(json));
     } catch {
-      this.sendError(ws, 'bad_json', 'Malformed message');
+      this.sendError(ws, "bad_json", "Malformed message");
       return;
     }
     if (!parsed.success) {
-      this.sendError(ws, 'bad_msg', parsed.error.message);
+      this.sendError(ws, "bad_msg", parsed.error.message);
       return;
     }
     const msg = parsed.data;
 
     const attachment = ws.deserializeAttachment() as SocketAttachment | null;
 
-    if (msg.kind === 'hello') {
+    if (msg.kind === "hello") {
       await this.handleHello(ws, msg.token);
       return;
     }
 
     if (!attachment) {
-      this.sendError(ws, 'no_hello', 'Send hello first');
-      ws.close(1008, 'no_hello');
+      this.sendError(ws, "no_hello", "Send hello first");
+      ws.close(1008, "no_hello");
       return;
     }
 
     switch (msg.kind) {
-      case 'ready':
+      case "ready":
         await this.handleReady(attachment.userId);
         break;
-      case 'click':
+      case "click":
         await this.handleClick(attachment.userId, msg.puzzleIdx, msg.x, msg.y);
         break;
-      case 'leave':
-        this.broadcast({ kind: 'player_left', userId: attachment.userId });
-        ws.close(1000, 'leave');
+      case "leave":
+        this.broadcast({ kind: "player_left", userId: attachment.userId });
+        ws.close(1000, "leave");
         break;
     }
   }
 
-  async webSocketClose(ws: WebSocket, _code: number, _reason: string, _clean: boolean): Promise<void> {
+  async webSocketClose(
+    ws: WebSocket,
+    _code: number,
+    _reason: string,
+    _clean: boolean,
+  ): Promise<void> {
     if (!this.room) return;
     const attachment = ws.deserializeAttachment() as SocketAttachment | null;
     if (!attachment) return;
@@ -141,16 +149,16 @@ export class GameRoom implements DurableObject {
       if (a?.userId === userId) return;
     }
 
-    if (this.room.status === 'in_progress') {
+    if (this.room.status === "in_progress") {
       // Soft disconnect; keep the seat for reconnection.
-      this.broadcast({ kind: 'player_offline', userId });
+      this.broadcast({ kind: "player_offline", userId });
       return;
     }
 
     // Waiting state (pre-first-game OR post-game): the seat is given up.
     if (!this.room.players[userId]) return;
     delete this.room.players[userId];
-    this.broadcast({ kind: 'player_left', userId });
+    this.broadcast({ kind: "player_left", userId });
 
     if (Object.keys(this.room.players).length === 0) {
       await this.state.storage.deleteAll();
@@ -176,8 +184,12 @@ export class GameRoom implements DurableObject {
     const now = Date.now();
 
     // Hard game timeout.
-    if (this.room.status === 'in_progress' && this.room.startedAt && now - this.room.startedAt >= GAME_TIMEOUT_MS) {
-      await this.endGame(null, 'timeout');
+    if (
+      this.room.status === "in_progress" &&
+      this.room.startedAt &&
+      now - this.room.startedAt >= GAME_TIMEOUT_MS
+    ) {
+      await this.endGame(null, "timeout");
       await this.scheduleIdleCleanup();
       return;
     }
@@ -195,13 +207,13 @@ export class GameRoom implements DurableObject {
   private async initRoom(code: string, mode: GameMode): Promise<Response> {
     if (this.room) {
       return new Response(JSON.stringify({ ok: true, already: true }), {
-        headers: { 'content-type': 'application/json' },
+        headers: { "content-type": "application/json" },
       });
     }
     this.room = {
       code,
       mode,
-      status: 'waiting',
+      status: "waiting",
       players: {},
       puzzles: null,
       startedAt: null,
@@ -212,34 +224,34 @@ export class GameRoom implements DurableObject {
     await this.persist();
     await this.state.storage.setAlarm(Date.now() + ROOM_IDLE_TIMEOUT_MS);
     return new Response(JSON.stringify({ ok: true }), {
-      headers: { 'content-type': 'application/json' },
+      headers: { "content-type": "application/json" },
     });
   }
 
   private async handleHello(ws: WebSocket, token: string): Promise<void> {
     const claims = await verifyToken(this.env.JWT_SECRET, token);
     if (!claims) {
-      this.sendError(ws, 'unauthenticated', 'Invalid token');
-      ws.close(1008, 'unauthenticated');
+      this.sendError(ws, "unauthenticated", "Invalid token");
+      ws.close(1008, "unauthenticated");
       return;
     }
     if (!this.room) {
-      this.sendError(ws, 'no_room', 'Room missing');
+      this.sendError(ws, "no_room", "Room missing");
       ws.close(1011);
       return;
     }
 
-    const capacity = this.room.mode === 'single' ? 1 : 2;
+    const capacity = this.room.mode === "single" ? 1 : 2;
     const existing = this.room.players[claims.sub];
     if (!existing) {
       if (Object.keys(this.room.players).length >= capacity) {
-        this.sendError(ws, 'room_full', 'Room full');
-        ws.close(1008, 'room_full');
+        this.sendError(ws, "room_full", "Room full");
+        ws.close(1008, "room_full");
         return;
       }
-      if (this.room.status !== 'waiting') {
-        this.sendError(ws, 'in_progress', 'Game already in progress');
-        ws.close(1008, 'in_progress');
+      if (this.room.status !== "waiting") {
+        this.sendError(ws, "in_progress", "Game already in progress");
+        ws.close(1008, "in_progress");
         return;
       }
       this.room.players[claims.sub] = {
@@ -256,7 +268,11 @@ export class GameRoom implements DurableObject {
       if (other === ws) continue;
       const a = other.deserializeAttachment() as SocketAttachment | null;
       if (a?.userId === claims.sub) {
-        try { other.close(4001, 'replaced'); } catch { /* ignore */ }
+        try {
+          other.close(4001, "replaced");
+        } catch {
+          /* ignore */
+        }
       }
     }
 
@@ -265,12 +281,12 @@ export class GameRoom implements DurableObject {
     if (!existing) {
       // Brand new seat.
       this.broadcastExcept(claims.sub, {
-        kind: 'player_joined',
+        kind: "player_joined",
         player: { userId: claims.sub, name: claims.name, ready: false, online: true },
       });
-    } else if (this.room.status === 'in_progress') {
+    } else if (this.room.status === "in_progress") {
       // Reconnect during an active game.
-      this.broadcastExcept(claims.sub, { kind: 'player_online', userId: claims.sub });
+      this.broadcastExcept(claims.sub, { kind: "player_online", userId: claims.sub });
     }
 
     this.send(ws, this.buildWelcome(claims.sub));
@@ -279,7 +295,7 @@ export class GameRoom implements DurableObject {
     // Auto-start the FIRST game as soon as the room fills. Rematches still
     // require explicit `ready` from both players (see handleReady).
     if (
-      this.room.status === 'waiting' &&
+      this.room.status === "waiting" &&
       this.room.gamesPlayed === 0 &&
       Object.keys(this.room.players).length >= capacity
     ) {
@@ -288,15 +304,15 @@ export class GameRoom implements DurableObject {
   }
 
   private async handleReady(userId: string): Promise<void> {
-    if (!this.room || this.room.status !== 'waiting') return;
+    if (!this.room || this.room.status !== "waiting") return;
     // First game auto-starts on fill; ready is only used for rematch votes.
     if (this.room.gamesPlayed === 0) return;
     const player = this.room.players[userId];
     if (!player || player.ready) return;
     player.ready = true;
-    this.broadcast({ kind: 'player_ready', userId });
+    this.broadcast({ kind: "player_ready", userId });
 
-    const capacity = this.room.mode === 'single' ? 1 : 2;
+    const capacity = this.room.mode === "single" ? 1 : 2;
     const playerList = Object.values(this.room.players);
     if (playerList.length >= capacity && playerList.every((p) => p.ready)) {
       await this.startGame();
@@ -309,13 +325,13 @@ export class GameRoom implements DurableObject {
     if (!this.room) return;
     const puzzles = await buildRound(this.env);
     this.room.puzzles = puzzles;
-    this.room.status = 'in_progress';
+    this.room.status = "in_progress";
     // Future-dated so both clients can cover image loading + countdown and
     // then begin counting from the exact same wall-clock instant.
     this.room.startedAt = Date.now() + START_COUNTDOWN_MS;
 
     this.broadcast({
-      kind: 'game_start',
+      kind: "game_start",
       startedAt: this.room.startedAt,
       puzzles: puzzles.map((p) => p.puzzle),
     });
@@ -323,8 +339,13 @@ export class GameRoom implements DurableObject {
     await this.persist();
   }
 
-  private async handleClick(userId: string, puzzleIdx: number, x: number, y: number): Promise<void> {
-    if (!this.room || this.room.status !== 'in_progress' || !this.room.puzzles) return;
+  private async handleClick(
+    userId: string,
+    puzzleIdx: number,
+    x: number,
+    y: number,
+  ): Promise<void> {
+    if (!this.room || this.room.status !== "in_progress" || !this.room.puzzles) return;
     // Reject clicks made during the pre-start countdown window.
     if (this.room.startedAt && Date.now() < this.room.startedAt) return;
     const player = this.room.players[userId];
@@ -350,7 +371,7 @@ export class GameRoom implements DurableObject {
     const foundCount = totalFound(player);
 
     this.broadcast({
-      kind: 'click_result',
+      kind: "click_result",
       userId,
       puzzleIdx,
       hit,
@@ -361,7 +382,7 @@ export class GameRoom implements DurableObject {
     const target = PUZZLES_PER_GAME * DIFFS_PER_PUZZLE;
     if (foundCount >= target) {
       player.elapsedMs = this.room.startedAt ? Date.now() - this.room.startedAt : 0;
-      await this.endGame(userId, 'winner');
+      await this.endGame(userId, "winner");
       return;
     }
 
@@ -370,7 +391,7 @@ export class GameRoom implements DurableObject {
 
   private async endGame(winnerId: string | null, _reason: string): Promise<void> {
     if (!this.room) return;
-    this.room.status = 'ended';
+    this.room.status = "ended";
     this.room.winnerId = winnerId;
 
     // Persist game results to D1 for everyone with a complete run.
@@ -398,7 +419,7 @@ export class GameRoom implements DurableObject {
     // their own elapsedMs set — fall back to game-end-minus-start.
     const gameElapsedMs = this.room.startedAt ? Date.now() - this.room.startedAt : null;
     this.broadcast({
-      kind: 'game_end',
+      kind: "game_end",
       winnerId,
       results: Object.values(this.room.players).map((p) => ({
         userId: p.userId,
@@ -415,7 +436,7 @@ export class GameRoom implements DurableObject {
       p.foundPerPuzzle = {};
       p.elapsedMs = null;
     }
-    this.room.status = 'waiting';
+    this.room.status = "waiting";
     this.room.puzzles = null;
     this.room.startedAt = null;
     this.room.winnerId = null;
@@ -436,7 +457,7 @@ export class GameRoom implements DurableObject {
   }
 
   private buildWelcome(forUserId: string): ServerMsg {
-    if (!this.room) throw new Error('no room');
+    if (!this.room) throw new Error("no room");
     const you = this.room.players[forUserId]!;
     const online = this.onlineUserIds();
     const players = Object.values(this.room.players).map((p) => ({
@@ -456,7 +477,7 @@ export class GameRoom implements DurableObject {
       foundCount: totalFound(p),
     }));
     return {
-      kind: 'welcome',
+      kind: "welcome",
       roomCode: this.room.code,
       mode: this.room.mode,
       status: this.room.status,
@@ -470,11 +491,15 @@ export class GameRoom implements DurableObject {
   }
 
   private send(ws: WebSocket, msg: ServerMsg): void {
-    try { ws.send(JSON.stringify(msg)); } catch { /* socket gone */ }
+    try {
+      ws.send(JSON.stringify(msg));
+    } catch {
+      /* socket gone */
+    }
   }
 
   private sendError(ws: WebSocket, code: string, message: string): void {
-    this.send(ws, { kind: 'error', code, message });
+    this.send(ws, { kind: "error", code, message });
   }
 
   private broadcast(msg: ServerMsg): void {
@@ -490,7 +515,7 @@ export class GameRoom implements DurableObject {
   }
 
   private async persist(): Promise<void> {
-    if (this.room) await this.state.storage.put('room', this.room);
+    if (this.room) await this.state.storage.put("room", this.room);
   }
 
   private async scheduleIdleCleanup(): Promise<void> {

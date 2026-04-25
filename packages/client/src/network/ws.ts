@@ -1,7 +1,4 @@
-import {
-  type ClientMsg,
-  ServerMsg,
-} from "@differ/shared";
+import { type ClientMsg, ServerMsg } from "@differ/shared";
 import { EventEmitter } from "pixi.js";
 
 // Wraps a single WebSocket connection to a GameRoom DO.
@@ -30,8 +27,11 @@ export class RoomSocket extends EventEmitter {
       });
       ws.addEventListener("message", (ev) => {
         let raw: unknown;
-        try { raw = JSON.parse(ev.data as string); }
-        catch { return; }
+        try {
+          raw = JSON.parse(ev.data as string);
+        } catch {
+          return;
+        }
         const parsed = ServerMsg.safeParse(raw);
         if (!parsed.success) {
           console.warn("bad server msg", parsed.error, raw);
@@ -58,7 +58,11 @@ export class RoomSocket extends EventEmitter {
 
   close(): void {
     this.closed = true;
-    try { this.ws?.close(1000); } catch { /* ignore */ }
+    try {
+      this.ws?.close(1000);
+    } catch {
+      /* ignore */
+    }
   }
 
   isClosed(): boolean {

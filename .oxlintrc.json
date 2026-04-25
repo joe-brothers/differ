@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "import", "promise", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "perf": "warn",
+    "suspicious": "warn"
+  },
+  "env": {
+    "es2024": true,
+    "browser": true,
+    "node": true,
+    "worker": true
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.wrangler/**",
+    "**/coverage/**",
+    "pnpm-lock.yaml"
+  ],
+  "rules": {
+    "no-console": "off",
+    "no-unused-vars": "off",
+    "typescript/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "typescript/no-explicit-any": "warn",
+    "unicorn/prefer-node-protocol": "error",
+    "import/no-duplicates": "error"
+  },
+  "overrides": [
+    {
+      "files": ["packages/server/**/*.ts", "packages/server/**/*.tsx"],
+      "env": { "browser": false, "worker": true, "node": true }
+    },
+    {
+      "files": ["packages/client/**/*.ts"],
+      "env": { "node": false, "browser": true }
+    },
+    {
+      "files": ["packages/server/scripts/**/*.ts"],
+      "env": { "node": true, "worker": false }
+    }
+  ]
+}

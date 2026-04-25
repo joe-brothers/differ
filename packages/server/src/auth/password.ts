@@ -5,7 +5,7 @@ const ITERATIONS = 100_000;
 const KEY_LEN_BITS = 256;
 
 function b64enc(bytes: Uint8Array): string {
-  let bin = '';
+  let bin = "";
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
   return btoa(bin);
 }
@@ -19,14 +19,14 @@ function b64dec(s: string): Uint8Array {
 
 async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
-    'raw',
+    "raw",
     new TextEncoder().encode(password),
-    'PBKDF2',
+    "PBKDF2",
     false,
-    ['deriveBits'],
+    ["deriveBits"],
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
     key,
     KEY_LEN_BITS,
   );
@@ -40,8 +40,8 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const parts = stored.split('$');
-  if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
+  const parts = stored.split("$");
+  if (parts.length !== 4 || parts[0] !== "pbkdf2") return false;
   const iter = Number(parts[1]);
   if (!Number.isFinite(iter) || iter <= 0) return false;
   const salt = b64dec(parts[2]!);

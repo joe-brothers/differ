@@ -37,10 +37,7 @@ export class MainMenuScene extends Container implements IScene {
       },
     });
     this.title.anchor.set(0.5);
-    this.title.position.set(
-      this.app.screen.width / 2,
-      this.app.screen.height / 4,
-    );
+    this.title.position.set(this.app.screen.width / 2, this.app.screen.height / 4);
     this.addChild(this.title);
   }
 

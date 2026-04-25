@@ -66,11 +66,7 @@ export class HtmlOverlay {
     return input;
   }
 
-  createButton(
-    parent: HTMLElement,
-    text: string,
-    color = "#4a90d9",
-  ): HTMLButtonElement {
+  createButton(parent: HTMLElement, text: string, color = "#4a90d9"): HTMLButtonElement {
     const button = document.createElement("button");
     button.textContent = text;
     Object.assign(button.style, {

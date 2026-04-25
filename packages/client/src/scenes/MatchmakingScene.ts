@@ -101,9 +101,10 @@ export class MatchmakingScene extends Container implements IScene {
     this.wireWaitingSocket();
   }
 
-  private renderWaitingView(
-    code: string | null,
-  ): { codeEl: HTMLDivElement; hint: HTMLParagraphElement } {
+  private renderWaitingView(code: string | null): {
+    codeEl: HTMLDivElement;
+    hint: HTMLParagraphElement;
+  } {
     this.resetOverlay();
     const card = this.overlay!.createFormContainer();
 
@@ -253,25 +254,21 @@ export class MatchmakingScene extends Container implements IScene {
     if (!socket) return;
     const myId = authState.getUser()?.userId;
 
-    socket.on(
-      "welcome",
-      (msg: { players: { userId: string; name: string }[] }) => {
-        const other = msg.players.find((p) => p.userId !== myId);
-        if (other) gameState.setOpponentUsername(other.name);
-      },
-    );
-    socket.on(
-      "player_joined",
-      (msg: { player: { userId: string; name: string } }) => {
-        gameState.setOpponentUsername(msg.player.name);
-      },
-    );
+    socket.on("welcome", (msg: { players: { userId: string; name: string }[] }) => {
+      const other = msg.players.find((p) => p.userId !== myId);
+      if (other) gameState.setOpponentUsername(other.name);
+    });
+    socket.on("player_joined", (msg: { player: { userId: string; name: string } }) => {
+      gameState.setOpponentUsername(msg.player.name);
+    });
     socket.on("error", (msg: { message: string }) => {
       console.warn("room error", msg.message);
     });
   }
 
-  update(_deltaTime: number): void { /* no-op */ }
+  update(_deltaTime: number): void {
+    /* no-op */
+  }
 
   resize(width: number, height: number): void {
     if (this.title) this.title.position.set(width / 2, height * 0.2);

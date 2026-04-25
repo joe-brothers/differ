@@ -39,13 +39,7 @@ export class GameCompleteScreen extends Container {
     const panelWidth = 400;
     const panelHeight = rank ? 400 : 350;
     const panel = new Graphics();
-    panel.roundRect(
-      -panelWidth / 2,
-      -panelHeight / 2,
-      panelWidth,
-      panelHeight,
-      20,
-    );
+    panel.roundRect(-panelWidth / 2, -panelHeight / 2, panelWidth, panelHeight, 20);
     panel.fill(0x2a2a4e);
     this.contentContainer.addChild(panel);
 
@@ -140,11 +134,7 @@ export class GameCompleteScreen extends Container {
     this.visible = true;
   }
 
-  private createButton(
-    label: string,
-    yPosition: number,
-    color: number,
-  ): Container {
+  private createButton(label: string, yPosition: number, color: number): Container {
     const parts = this.createButtonParts(label, yPosition, color);
     return parts.button;
   }
@@ -160,13 +150,7 @@ export class GameCompleteScreen extends Container {
     button.position.set(0, yPosition);
 
     const bg = new Graphics();
-    bg.roundRect(
-      -buttonWidth / 2,
-      -buttonHeight / 2,
-      buttonWidth,
-      buttonHeight,
-      10,
-    );
+    bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
     bg.fill(color);
 
     const text = new Text({
@@ -189,26 +173,14 @@ export class GameCompleteScreen extends Container {
     button.on("pointerover", () => {
       if (button.eventMode === "none") return;
       bg.clear();
-      bg.roundRect(
-        -buttonWidth / 2,
-        -buttonHeight / 2,
-        buttonWidth,
-        buttonHeight,
-        10,
-      );
+      bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
       bg.fill(hoverColor);
     });
 
     button.on("pointerout", () => {
       if (button.eventMode === "none") return;
       bg.clear();
-      bg.roundRect(
-        -buttonWidth / 2,
-        -buttonHeight / 2,
-        buttonWidth,
-        buttonHeight,
-        10,
-      );
+      bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
       bg.fill(color);
     });
 

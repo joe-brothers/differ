@@ -25,13 +25,7 @@ export class MenuOverlay extends Container {
     const menuBg = new Graphics();
     const menuWidth = 300;
     const menuHeight = 250;
-    menuBg.roundRect(
-      -menuWidth / 2,
-      -menuHeight / 2,
-      menuWidth,
-      menuHeight,
-      16,
-    );
+    menuBg.roundRect(-menuWidth / 2, -menuHeight / 2, menuWidth, menuHeight, 16);
     menuBg.fill(0x2a2a4e);
     this.menuContainer.addChild(menuBg);
 
@@ -72,13 +66,7 @@ export class MenuOverlay extends Container {
     button.position.set(0, yOffset);
 
     const bg = new Graphics();
-    bg.roundRect(
-      -buttonWidth / 2,
-      -buttonHeight / 2,
-      buttonWidth,
-      buttonHeight,
-      10,
-    );
+    bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
     bg.fill(COLORS.primary);
 
     const text = new Text({
@@ -99,25 +87,13 @@ export class MenuOverlay extends Container {
 
     button.on("pointerover", () => {
       bg.clear();
-      bg.roundRect(
-        -buttonWidth / 2,
-        -buttonHeight / 2,
-        buttonWidth,
-        buttonHeight,
-        10,
-      );
+      bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
       bg.fill(COLORS.primaryHover);
     });
 
     button.on("pointerout", () => {
       bg.clear();
-      bg.roundRect(
-        -buttonWidth / 2,
-        -buttonHeight / 2,
-        buttonWidth,
-        buttonHeight,
-        10,
-      );
+      bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
       bg.fill(COLORS.primary);
     });
 

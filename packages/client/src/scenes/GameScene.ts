@@ -93,23 +93,12 @@ export class GameScene extends Container implements IScene {
     this.navButtons = new NavButtons();
     this.progressDisplay = new ProgressDisplay();
     this.menuIcon = new MenuIcon();
-    this.countdownOverlay = new CountdownOverlay(
-      app.screen.width,
-      app.screen.height,
-    );
+    this.countdownOverlay = new CountdownOverlay(app.screen.width, app.screen.height);
     this.menuOverlay = new MenuOverlay(app.screen.width, app.screen.height);
     this.celebrationEffect = new CelebrationEffect();
-    this.gameCompleteScreen = new GameCompleteScreen(
-      app.screen.width,
-      app.screen.height,
-    );
+    this.gameCompleteScreen = new GameCompleteScreen(app.screen.width, app.screen.height);
 
-    this.addChild(
-      this.placeholderContainer,
-      this.gameArea,
-      this.uiLayer,
-      this.overlayLayer,
-    );
+    this.addChild(this.placeholderContainer, this.gameArea, this.uiLayer, this.overlayLayer);
   }
 
   async init(): Promise<void> {
@@ -125,14 +114,14 @@ export class GameScene extends Container implements IScene {
     this.loadCurrentImage();
 
     const state = gameState.getState();
-    const remaining = state.serverStartedAt
-      ? state.serverStartedAt - Date.now()
-      : 0;
+    const remaining = state.serverStartedAt ? state.serverStartedAt - Date.now() : 0;
     if (remaining > 200) {
       // Countdown is cosmetic; the authoritative start moment is
       // state.serverStartedAt — both clients reveal the board at that
       // instant regardless of their image-load / countdown variance.
-      this.countdownOverlay.play().catch(() => { /* swallow */ });
+      this.countdownOverlay.play().catch(() => {
+        /* swallow */
+      });
       await new Promise((r) => setTimeout(r, remaining));
       this.countdownOverlay.visible = false;
     }
@@ -176,13 +165,7 @@ export class GameScene extends Container implements IScene {
     this.placeholderContainer.addChild(leftPlaceholder);
 
     const rightPlaceholder = new Graphics();
-    rightPlaceholder.roundRect(
-      scaledWidth + IMAGE_GAP,
-      0,
-      scaledWidth,
-      scaledHeight,
-      8,
-    );
+    rightPlaceholder.roundRect(scaledWidth + IMAGE_GAP, 0, scaledWidth, scaledHeight, 8);
     rightPlaceholder.fill({ color: 0x2a2a4e });
     rightPlaceholder.stroke({ width: 2, color: 0x4a4a6e });
     this.placeholderContainer.addChild(rightPlaceholder);
@@ -192,18 +175,12 @@ export class GameScene extends Container implements IScene {
     this.timer.position.set(UI_PADDING, UI_PADDING);
     this.uiLayer.addChild(this.timer);
 
-    this.progressDisplay.position.set(
-      this.app.screen.width / 2 - 40,
-      UI_PADDING,
-    );
+    this.progressDisplay.position.set(this.app.screen.width / 2 - 40, UI_PADDING);
     this.uiLayer.addChild(this.progressDisplay);
 
     const state = gameState.getState();
     if (state.gameType !== "one_on_one") {
-      this.menuIcon.position.set(
-        this.app.screen.width - UI_PADDING - 44,
-        UI_PADDING,
-      );
+      this.menuIcon.position.set(this.app.screen.width - UI_PADDING - 44, UI_PADDING);
       this.menuIcon.setCallback(() => this.showPauseMenu());
       this.uiLayer.addChild(this.menuIcon);
     }
@@ -230,10 +207,7 @@ export class GameScene extends Container implements IScene {
       });
       // Right-aligned at top-right (menu icon is hidden in 1v1 mode).
       this.opponentProgressText.anchor.set(1, 0);
-      this.opponentProgressText.position.set(
-        this.app.screen.width - UI_PADDING,
-        UI_PADDING,
-      );
+      this.opponentProgressText.position.set(this.app.screen.width - UI_PADDING, UI_PADDING);
       this.uiLayer.addChild(this.opponentProgressText);
     }
 
@@ -353,11 +327,9 @@ export class GameScene extends Container implements IScene {
 
       if (state.gameType === "one_on_one") {
         const isWin = msg.winnerId === myId;
-        this.gameCompleteScreen.showResult(
-          isWin ? "win" : "lose",
-          myElapsedSec,
-          { playAgainLabel: "Rematch" },
-        );
+        this.gameCompleteScreen.showResult(isWin ? "win" : "lose", myElapsedSec, {
+          playAgainLabel: "Rematch",
+        });
       } else {
         this.gameCompleteScreen.show(myElapsedSec);
       }
@@ -402,9 +374,7 @@ export class GameScene extends Container implements IScene {
     if (!this.opponentProgressText) return;
     const state = gameState.getState();
     const base = `Opponent ${state.opponentFoundCount}/${TOTAL_DIFFS_PER_GAME}`;
-    this.opponentProgressText.text = this.opponentOnline
-      ? base
-      : `${base} (Disconnected)`;
+    this.opponentProgressText.text = this.opponentOnline ? base : `${base} (Disconnected)`;
     this.opponentProgressText.style.fill = this.opponentOnline
       ? COLORS.textSecondary
       : COLORS.error;
@@ -424,17 +394,11 @@ export class GameScene extends Container implements IScene {
 
     this.leftPanel = new ImagePanel(originalTexture);
     this.leftPanel.scale.set(this.imageScale);
-    this.leftPanel.setDifferences(
-      currentDiffs,
-      (x, y) => this.handleClickAt(x, y),
-    );
+    this.leftPanel.setDifferences(currentDiffs, (x, y) => this.handleClickAt(x, y));
     this.gameArea.addChild(this.leftPanel);
 
     this.rightPanelContainer = new Container();
-    this.rightPanelContainer.position.set(
-      IMAGE_WIDTH * this.imageScale + IMAGE_GAP,
-      0,
-    );
+    this.rightPanelContainer.position.set(IMAGE_WIDTH * this.imageScale + IMAGE_GAP, 0);
     this.rightPanelContainer.scale.set(this.imageScale);
 
     this.rightBackgroundSprite = new Sprite(originalTexture);
@@ -551,17 +515,13 @@ export class GameScene extends Container implements IScene {
   private async playCelebration(): Promise<void> {
     this.setInputEnabled(false);
 
-    const centerX =
-      this.gameArea.x + (IMAGE_WIDTH * this.imageScale * 2 + IMAGE_GAP) / 2;
+    const centerX = this.gameArea.x + (IMAGE_WIDTH * this.imageScale * 2 + IMAGE_GAP) / 2;
     const centerY = this.gameArea.y + (IMAGE_HEIGHT * this.imageScale) / 2;
 
     await this.celebrationEffect.play(centerX, centerY);
 
     const state = gameState.getState();
-    if (
-      state.currentImageIndex < IMAGES_PER_GAME - 1 &&
-      state.mode !== "completed"
-    ) {
+    if (state.currentImageIndex < IMAGES_PER_GAME - 1 && state.mode !== "completed") {
       setTimeout(() => gameState.nextImage(), 300);
     }
 

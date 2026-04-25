@@ -35,10 +35,7 @@ export class AuthScene extends Container implements IScene {
       },
     });
     this.title.anchor.set(0.5);
-    this.title.position.set(
-      this.app.screen.width / 2,
-      this.app.screen.height * 0.15,
-    );
+    this.title.position.set(this.app.screen.width / 2, this.app.screen.height * 0.15);
     this.addChild(this.title);
   }
 
@@ -182,7 +179,9 @@ export class AuthScene extends Container implements IScene {
     usernameInput.focus();
   }
 
-  update(): void { /* no-op */ }
+  update(): void {
+    /* no-op */
+  }
 
   resize(width: number, height: number): void {
     if (this.title) this.title.position.set(width / 2, height * 0.15);

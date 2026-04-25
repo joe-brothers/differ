@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import { GameMode } from './game.js';
+import { z } from "zod";
+import { GameMode } from "./game.js";
 
 export const PublicUser = z.object({
   userId: z.string(),
@@ -17,7 +17,11 @@ export type AuthRes = z.infer<typeof AuthRes>;
 export const GuestReq = z.object({}).optional();
 
 export const UpgradeReq = z.object({
-  username: z.string().min(3).max(32).regex(/^[A-Za-z0-9_]+$/),
+  username: z
+    .string()
+    .min(3)
+    .max(32)
+    .regex(/^[A-Za-z0-9_]+$/),
   password: z.string().min(6).max(128),
 });
 export type UpgradeReq = z.infer<typeof UpgradeReq>;
@@ -46,7 +50,7 @@ export const JoinRoomRes = z.object({
 export type JoinRoomRes = z.infer<typeof JoinRoomRes>;
 
 export const LeaderboardQuery = z.object({
-  mode: GameMode.default('single'),
+  mode: GameMode.default("single"),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 });

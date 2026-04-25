@@ -22,10 +22,7 @@ export class LoadingScene extends Container implements IScene {
     this.spinner = new Sprite(texture);
     this.spinner.anchor.set(0.5);
     this.spinner.scale.set(SPINNER_SCALE);
-    this.spinner.position.set(
-      this.app.screen.width / 2,
-      this.app.screen.height / 2,
-    );
+    this.spinner.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
     this.addChild(this.spinner);
   }
 
