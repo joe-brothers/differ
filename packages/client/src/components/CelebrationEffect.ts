@@ -1,10 +1,10 @@
 import { Container } from "pixi.js";
 import confetti from "canvas-confetti";
 
-// Theme-aligned palette pulled from DESIGN.md tokens. Mid-saturation hues
-// (no `#202124` greys, no `#E8F0FE` pastels) so the confetti reads clearly
-// against both the white surface and the underlying images.
-const THEME_COLORS = ["#1A73E8", "#8AB4F8", "#188038", "#F9AB00", "#D93025"];
+// Cool-tone palette: Chromium blues stepping from primary down to a faint
+// tint, plus white and a neutral grey for variety. Reads cleanly against
+// both the white surface and arbitrary game images.
+const THEME_COLORS = ["#1A73E8", "#8AB4F8", "#A8C7FA", "#FFFFFF", "#BDC1C6"];
 
 // Still extends Container so GameScene's `overlayLayer.addChild(...)` keeps
 // working, but the actual particles render on canvas-confetti's own DOM
@@ -20,13 +20,16 @@ export class CelebrationEffect extends Container {
       y: clamp01(centerY / h),
     };
 
-    // Basic-cannon preset, gently tuned for an "image cleared" beat.
+    // 360° burst: particles radiate outward from the origin in all directions.
+    // Low gravity so they drift outward rather than rain straight down — feels
+    // like an "image cleared" pop, not a cannon shot from below.
     void confetti({
-      particleCount: 80,
-      spread: 70,
-      startVelocity: 35,
-      gravity: 0.9,
-      ticks: 200, // ~3.3s before particles are reaped
+      particleCount: 110,
+      spread: 360,
+      startVelocity: 28,
+      gravity: 0.45,
+      ticks: 80, // ~1.3s lifetime
+      decay: 0.9,
       scalar: 0.9,
       origin,
       colors: THEME_COLORS,
@@ -34,9 +37,9 @@ export class CelebrationEffect extends Container {
       zIndex: 30, // above Pixi canvas, below blocking modals
     });
 
-    // Resolve before the particles have finished so the next-image
-    // transition doesn't stall waiting on the visual to clear.
-    return new Promise((resolve) => window.setTimeout(resolve, 450));
+    // Resolve before particles have fully cleared so the next-image
+    // transition doesn't stall on the visual.
+    return new Promise((resolve) => window.setTimeout(resolve, 350));
   }
 }
 

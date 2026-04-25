@@ -495,10 +495,9 @@ export class GameScene extends Container implements IScene {
       ui.setTimerSec(this.timerFrozenAtSec);
       return;
     }
-    const state = gameState.getState();
-    if (!state.serverStartedAt) return;
-    const elapsedSec = Math.max(0, (Date.now() - state.serverStartedAt) / 1000);
-    ui.setTimerSec(elapsedSec);
+    // gameState owns pause-time accounting so the timer freezes while the
+    // pause modal is up (single mode) and resumes from where it left off.
+    ui.setTimerSec(gameState.getEffectiveElapsedMs() / 1000);
   }
 
   resize(width: number, height: number): void {

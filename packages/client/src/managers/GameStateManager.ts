@@ -23,6 +23,8 @@ export class GameStateManager extends EventEmitter {
       inputDisabled: false,
       opponentFoundCount: 0,
       opponentUsername: "",
+      pausedAt: null,
+      pausedMs: 0,
     };
   }
 
@@ -57,6 +59,8 @@ export class GameStateManager extends EventEmitter {
       inputDisabled: false,
       opponentFoundCount: existingOpponentCount,
       opponentUsername: prevOpponentName,
+      pausedAt: null,
+      pausedMs: 0,
     };
     this.emit("gameInitialized");
   }
@@ -145,15 +149,29 @@ export class GameStateManager extends EventEmitter {
   pause(): void {
     if (this.state.mode === "playing") {
       this.state.mode = "paused";
+      this.state.pausedAt = Date.now();
       this.emit("modeChanged", "paused");
     }
   }
 
   resume(): void {
     if (this.state.mode === "paused") {
+      if (this.state.pausedAt != null) {
+        this.state.pausedMs += Date.now() - this.state.pausedAt;
+        this.state.pausedAt = null;
+      }
       this.state.mode = "playing";
       this.emit("modeChanged", "playing");
     }
+  }
+
+  // Wall-clock elapsed time minus accumulated pauses (and frozen at the
+  // pause moment while currently paused). Returns 0 before the game starts.
+  getEffectiveElapsedMs(): number {
+    const { serverStartedAt, pausedAt, pausedMs } = this.state;
+    if (serverStartedAt == null) return 0;
+    const reference = pausedAt ?? Date.now();
+    return Math.max(0, reference - serverStartedAt - pausedMs);
   }
 
   reset(): void {

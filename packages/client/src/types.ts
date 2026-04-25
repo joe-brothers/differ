@@ -45,6 +45,12 @@ export interface GameState {
   inputDisabled: boolean;
   opponentFoundCount: number;
   opponentUsername: string;
+  // Wall-clock at which the current pause began; null while playing.
+  // Combined with `pausedMs` this gives a pause-aware effective elapsed time
+  // for the local timer (1v1 mode never pauses so this stays null there).
+  pausedAt: number | null;
+  // Total milliseconds spent paused so far in this game.
+  pausedMs: number;
 }
 
 // Scene interface
