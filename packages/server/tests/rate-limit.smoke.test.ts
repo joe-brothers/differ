@@ -36,14 +36,14 @@ async function postJson(
 // appears. Parallel `Promise.all` would race and break the assertion.
 /* eslint-disable no-await-in-loop */
 
-test("guest endpoint enforces per-IP limit (20/60s)", async () => {
+test("guest endpoint enforces per-IP limit (5/60s)", async () => {
   const ip = freshIp("guest");
   const headers = { "cf-connecting-ip": ip };
 
   let last200 = 0;
   let first429 = -1;
   let retryAfter = "";
-  for (let i = 1; i <= 22; i++) {
+  for (let i = 1; i <= 7; i++) {
     const res = await postJson("/auth/guest", {}, headers);
     if (res.status === 200) last200 = i;
     else if (res.status === 429 && first429 === -1) {
@@ -53,24 +53,24 @@ test("guest endpoint enforces per-IP limit (20/60s)", async () => {
     await res.body?.cancel();
   }
 
-  assert.ok(last200 >= 20, `expected ≥20 successes, got ${last200}`);
-  assert.ok(first429 > 0 && first429 <= 22, `expected 429 within 22 reqs, got at ${first429}`);
+  assert.ok(last200 >= 5, `expected ≥5 successes, got ${last200}`);
+  assert.ok(first429 > 0 && first429 <= 7, `expected 429 within 7 reqs, got at ${first429}`);
   assert.ok(retryAfter.length > 0, "Retry-After header missing on 429");
 });
 
-test("login endpoint keys by IP+username — same combo trips after 10", async () => {
+test("login endpoint keys by IP+username — same combo trips after 5", async () => {
   const ip = freshIp("login-same");
   const username = `nope_${Date.now()}`;
   const headers = { "cf-connecting-ip": ip };
 
   let first429 = -1;
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 1; i <= 7; i++) {
     const res = await postJson("/auth/login", { username, password: "x" }, headers);
     if (res.status === 429 && first429 === -1) first429 = i;
     await res.body?.cancel();
   }
 
-  assert.ok(first429 > 0 && first429 <= 12, `expected 429 by req 12, got at ${first429}`);
+  assert.ok(first429 > 0 && first429 <= 7, `expected 429 by req 7, got at ${first429}`);
 });
 
 test("login buckets are independent across usernames from same IP", async () => {
@@ -81,7 +81,7 @@ test("login buckets are independent across usernames from same IP", async () => 
 
   let any429 = false;
   for (const u of [userA, userB]) {
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 4; i++) {
       const res = await postJson("/auth/login", { username: u, password: "x" }, headers);
       if (res.status === 429) any429 = true;
       await res.body?.cancel();

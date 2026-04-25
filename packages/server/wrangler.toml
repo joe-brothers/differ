@@ -1,25 +1,22 @@
-name = "differ-server"
+name = "differ-server-local"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Top-level config = local dev (`wrangler dev`). Production uses the
+# `[env.production]` block below; deploy with `pnpm deploy:prod`. Named-env
+# bindings DO NOT inherit from top-level — every binding/var must be repeated.
+
 [vars]
 JWT_ISSUER = "differ"
 CDN_BASE = "https://differ-assets.joe-brothers.com"
-# Comma-separated list of origins allowed to call this API. Empty in dev to
-# permit any origin (handled in code). For production, set to the prod web
-# origin (and staging if applicable).
 ALLOWED_ORIGINS = ""
-# Optional: when set, require Cloudflare Turnstile token on auth endpoints.
-# Empty disables verification (dev). Use `wrangler secret put TURNSTILE_SECRET`
-# in prod.
 TURNSTILE_SECRET = ""
 
-# Local dev uses same bindings; wrangler d1 --local persists to .wrangler/
 [[d1_databases]]
 binding = "DB"
-database_name = "differ"
-database_id = "00000000-0000-0000-0000-000000000000" # replaced on `wrangler d1 create differ`
+database_name = "differ-dev"
+database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "src/db/migrations"
 
 [[durable_objects.bindings]]
@@ -30,30 +27,86 @@ class_name = "GameRoom"
 tag = "v1"
 new_sqlite_classes = ["GameRoom"]
 
-# Rate limit bindings (period: 10 or 60 seconds only)
+# namespace_id 1xxx = local, 2xxx = prod. Counters are shared per namespace_id
+# across deployments, so dev tests must not reuse prod IDs.
 [[unsafe.bindings]]
 name = "RL_LOGIN"
 type = "ratelimit"
 namespace_id = "1001"
-simple = { limit = 10, period = 60 }
+simple = { limit = 5, period = 60 }
 
 [[unsafe.bindings]]
 name = "RL_GUEST"
 type = "ratelimit"
 namespace_id = "1002"
-simple = { limit = 20, period = 60 }
+simple = { limit = 5, period = 60 }
 
 [[unsafe.bindings]]
 name = "RL_UPGRADE"
 type = "ratelimit"
 namespace_id = "1003"
-simple = { limit = 5, period = 60 }
+simple = { limit = 1, period = 60 }
 
 [[unsafe.bindings]]
 name = "RL_ROOM"
 type = "ratelimit"
 namespace_id = "1004"
-simple = { limit = 10, period = 60 }
+simple = { limit = 5, period = 60 }
 
 [observability]
+enabled = true
+
+# === Production ============================================================
+
+[env.production]
+name = "differ-server"
+
+[env.production.vars]
+JWT_ISSUER = "differ"
+CDN_BASE = "https://differ-assets.joe-brothers.com"
+# Replace with the prod web origin(s), comma-separated, before launch.
+ALLOWED_ORIGINS = "https://differ.joe-brothers.com"
+# TURNSTILE_SECRET is set via `wrangler secret put TURNSTILE_SECRET --env production`.
+# The empty default disables verification — must be overridden before launch.
+TURNSTILE_SECRET = ""
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "differ"
+database_id = "4d5c8903-15b7-49b5-ab96-c64f48e36416"
+migrations_dir = "src/db/migrations"
+
+[[env.production.durable_objects.bindings]]
+name = "GAME_ROOM"
+class_name = "GameRoom"
+
+[[env.production.migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom"]
+
+[[env.production.unsafe.bindings]]
+name = "RL_LOGIN"
+type = "ratelimit"
+namespace_id = "2001"
+simple = { limit = 5, period = 60 }
+
+[[env.production.unsafe.bindings]]
+name = "RL_GUEST"
+type = "ratelimit"
+namespace_id = "2002"
+simple = { limit = 5, period = 60 }
+
+[[env.production.unsafe.bindings]]
+name = "RL_UPGRADE"
+type = "ratelimit"
+namespace_id = "2003"
+simple = { limit = 1, period = 60 }
+
+[[env.production.unsafe.bindings]]
+name = "RL_ROOM"
+type = "ratelimit"
+namespace_id = "2004"
+simple = { limit = 5, period = 60 }
+
+[env.production.observability]
 enabled = true

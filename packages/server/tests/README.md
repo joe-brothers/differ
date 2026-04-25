@@ -42,12 +42,12 @@ exit code means at least one scenario didn't behave as configured in
 
 ### What is verified
 
-| Endpoint      | Key         | Configured | Test asserts                                                   |
-| ------------- | ----------- | ---------: | -------------------------------------------------------------- |
-| `/auth/guest` | IP          |  20 / 60 s | 21st request returns 429 + Retry-After                         |
-| `/auth/login` | IP+username |  10 / 60 s | 11th attempt at same combo → 429                               |
-| `/auth/login` | IP+username |  10 / 60 s | Different username from same IP stays unaffected               |
-| `POST /rooms` | userId      |  10 / 60 s | 11th create from same user → 429 (k6 only — needs cookie auth) |
+| Endpoint      | Key         | Configured | Test asserts                                                  |
+| ------------- | ----------- | ---------: | ------------------------------------------------------------- |
+| `/auth/guest` | IP          |   5 / 60 s | 6th request returns 429 + Retry-After                         |
+| `/auth/login` | IP+username |   5 / 60 s | 6th attempt at same combo → 429                               |
+| `/auth/login` | IP+username |   5 / 60 s | Different username from same IP stays unaffected              |
+| `POST /rooms` | userId      |   5 / 60 s | 6th create from same user → 429 (k6 only — needs cookie auth) |
 
 ### Why not Vitest?
 

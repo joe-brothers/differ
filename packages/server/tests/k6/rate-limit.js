@@ -1,7 +1,7 @@
 // k6 rate-limit assertion script.
 //
 // Verifies that the rate-limit bindings configured in `wrangler.toml`
-// (RL_GUEST=20/60s, RL_LOGIN=10/60s, RL_ROOM=10/60s) actually enforce
+// (RL_GUEST=5/60s, RL_LOGIN=5/60s, RL_ROOM=5/60s) actually enforce
 // their thresholds end-to-end and emit a 429 + Retry-After header.
 //
 // Usage:
@@ -79,14 +79,14 @@ function headers(ip, extra = {}) {
 }
 
 // ---- guest_ip_limit -----------------------------------------------------
-// /auth/guest is keyed by IP only (RL_GUEST=20/60s). 21st request from the
+// /auth/guest is keyed by IP only (RL_GUEST=5/60s). 6th request from the
 // same IP must be 429 with Retry-After.
 export function guestIpLimit() {
   const ip = freshIp("guest");
   let last200 = 0;
   let first429 = -1;
   let retryAfter = "";
-  for (let i = 1; i <= 22; i++) {
+  for (let i = 1; i <= 7; i++) {
     const res = http.post(`${BASE_URL}/auth/guest`, "{}", { headers: headers(ip) });
     if (res.status === 200) {
       last200 = i;
@@ -97,8 +97,8 @@ export function guestIpLimit() {
   }
   if (
     !check(null, {
-      "guest: at least 20 successes": () => last200 >= 20,
-      "guest: 429 by request 22": () => first429 > 0 && first429 <= 22,
+      "guest: at least 5 successes": () => last200 >= 5,
+      "guest: 429 by request 7": () => first429 > 0 && first429 <= 7,
       "guest: Retry-After present": () => retryAfter !== "",
     })
   ) {
@@ -107,13 +107,13 @@ export function guestIpLimit() {
 }
 
 // ---- login_ip_username_limit -------------------------------------------
-// /auth/login is keyed by IP+username (RL_LOGIN=10/60s). 11 attempts at the
+// /auth/login is keyed by IP+username (RL_LOGIN=5/60s). 6 attempts at the
 // same (ip, username) must produce a 429.
 export function loginIpUsernameLimit() {
   const ip = freshIp("login-same");
   const username = `noone_${Date.now()}`;
   let first429 = -1;
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 1; i <= 7; i++) {
     const res = http.post(
       `${BASE_URL}/auth/login`,
       JSON.stringify({ username, password: "wrongpass" }),
@@ -125,7 +125,7 @@ export function loginIpUsernameLimit() {
   }
   if (
     !check(null, {
-      "login: 429 by request 12 (limit=10)": () => first429 > 0 && first429 <= 12,
+      "login: 429 by request 7 (limit=5)": () => first429 > 0 && first429 <= 7,
     })
   ) {
     fail(`login_ip_username_limit failed: first429=${first429}`);
@@ -133,15 +133,15 @@ export function loginIpUsernameLimit() {
 }
 
 // ---- login_buckets_separate --------------------------------------------
-// IP+username keying must NOT cross-contaminate: 10 attempts at userA followed
-// by 10 attempts at userB from the same IP must all stay below the threshold.
+// IP+username keying must NOT cross-contaminate: 4 attempts at userA followed
+// by 4 attempts at userB from the same IP must all stay below the threshold.
 export function loginBucketsSeparate() {
   const ip = freshIp("login-split");
   const userA = `usera_${Date.now()}`;
   const userB = `userb_${Date.now()}`;
   let any429 = false;
   for (const u of [userA, userB]) {
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 4; i++) {
       const res = http.post(
         `${BASE_URL}/auth/login`,
         JSON.stringify({ username: u, password: "wrong" }),
@@ -160,8 +160,8 @@ export function loginBucketsSeparate() {
 }
 
 // ---- room_user_limit ---------------------------------------------------
-// POST /rooms is keyed by userId (RL_ROOM=10/60s). Auth as guest, then
-// burn through 11 room creations and expect a 429.
+// POST /rooms is keyed by userId (RL_ROOM=5/60s). Auth as guest, then
+// burn through 6 room creations and expect a 429.
 export function roomUserLimit() {
   const ip = freshIp("room");
   const jar = http.cookieJar();
@@ -170,7 +170,7 @@ export function roomUserLimit() {
     fail(`room_user_limit: could not create guest (${guestRes.status})`);
   }
   let first429 = -1;
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 1; i <= 7; i++) {
     const res = http.post(`${BASE_URL}/rooms`, JSON.stringify({ mode: "single" }), {
       headers: headers(ip),
       cookies: jar,
@@ -181,7 +181,7 @@ export function roomUserLimit() {
   }
   if (
     !check(null, {
-      "rooms: 429 by request 12 (limit=10)": () => first429 > 0 && first429 <= 12,
+      "rooms: 429 by request 7 (limit=5)": () => first429 > 0 && first429 <= 7,
     })
   ) {
     fail(`room_user_limit failed: first429=${first429}`);
