@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:prod": "VITE_API_BASE_URL=https://api.differ.joe-brothers.com vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },

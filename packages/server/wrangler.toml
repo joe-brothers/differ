@@ -11,7 +11,12 @@ compatibility_flags = ["nodejs_compat"]
 JWT_ISSUER = "differ"
 CDN_BASE = "https://differ-assets.joe-brothers.com"
 ALLOWED_ORIGINS = ""
-TURNSTILE_SECRET = ""
+
+# Declared secrets. wrangler validates these are set (via .dev.vars locally,
+# `wrangler secret put` remotely) before dev/deploy. Any value listed here must
+# NOT also appear in [vars], or the var would overwrite the secret on deploy.
+[secrets]
+required = ["JWT_SECRET", "TURNSTILE_SECRET"]
 
 [[d1_databases]]
 binding = "DB"
@@ -60,16 +65,15 @@ enabled = true
 
 [env.production]
 name = "differ-server"
-routes = [{ pattern = "api.differ.joe-brothers.com/*", custom_domain = true }]
+routes = [{ pattern = "api.differ.joe-brothers.com", custom_domain = true }]
 
 [env.production.vars]
 JWT_ISSUER = "differ"
 CDN_BASE = "https://differ-assets.joe-brothers.com"
-# Replace with the prod web origin(s), comma-separated, before launch.
 ALLOWED_ORIGINS = "https://differ.joe-brothers.com"
-# TURNSTILE_SECRET is set via `wrangler secret put TURNSTILE_SECRET --env production`.
-# The empty default disables verification — must be overridden before launch.
-TURNSTILE_SECRET = ""
+
+[env.production.secrets]
+required = ["JWT_SECRET", "TURNSTILE_SECRET"]
 
 [[env.production.d1_databases]]
 binding = "DB"
