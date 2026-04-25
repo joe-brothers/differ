@@ -8,6 +8,20 @@ import { signToken } from "./jwt.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { requireAuth, type AuthEnv } from "./middleware.js";
 import { checkRateLimit, guestKey, loginKey, upgradeKey } from "./rate-limit.js";
+import { setTokenCookie, clearTokenCookie } from "./cookie.js";
+import { verifyTurnstile } from "./turnstile.js";
+
+function clientIp(c: { req: { header: (h: string) => string | undefined } }): string | undefined {
+  return c.req.header("cf-connecting-ip");
+}
+
+function turnstileTokenFrom(raw: unknown): string | undefined {
+  if (raw && typeof raw === "object" && "turnstileToken" in raw) {
+    const v = (raw as { turnstileToken: unknown }).turnstileToken;
+    if (typeof v === "string") return v;
+  }
+  return undefined;
+}
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
 
@@ -23,6 +37,11 @@ function genUserId(): string {
 authRoutes.post("/guest", async (c) => {
   const limited = await checkRateLimit(c.env.RL_GUEST, guestKey(c));
   if (limited) return limited;
+  const raw = await c.req.json().catch(() => ({}));
+  const ts = await verifyTurnstile(c.env.TURNSTILE_SECRET, turnstileTokenFrom(raw), clientIp(c));
+  if (!ts.ok) {
+    return c.json({ error: { code: "captcha_failed", message: "Captcha required" } }, 400);
+  }
   const userId = genUserId();
   const name = randomGuestName();
   const db = getDb(c.env.DB);
@@ -32,7 +51,8 @@ authRoutes.post("/guest", async (c) => {
     name,
     isGuest: true,
   });
-  const body: AuthRes = { token, user: { userId, name, isGuest: true } };
+  setTokenCookie(c, token);
+  const body: AuthRes = { user: { userId, name, isGuest: true } };
   return c.json(body);
 });
 
@@ -47,6 +67,10 @@ authRoutes.post("/login", async (c) => {
   // legitimate users on shared NAT aren't blocked by neighbors' typos.
   const limited = await checkRateLimit(c.env.RL_LOGIN, loginKey(c, username));
   if (limited) return limited;
+  const ts = await verifyTurnstile(c.env.TURNSTILE_SECRET, turnstileTokenFrom(raw), clientIp(c));
+  if (!ts.ok) {
+    return c.json({ error: { code: "captcha_failed", message: "Captcha required" } }, 400);
+  }
   const db = getDb(c.env.DB);
   const row = await db
     .select({
@@ -70,7 +94,8 @@ authRoutes.post("/login", async (c) => {
     name: row.name,
     isGuest: false,
   });
-  const body: AuthRes = { token, user: { userId: row.id, name: row.name, isGuest: false } };
+  setTokenCookie(c, token);
+  const body: AuthRes = { user: { userId: row.id, name: row.name, isGuest: false } };
   return c.json(body);
 });
 
@@ -102,6 +127,10 @@ protectedRoutes.post("/upgrade", async (c) => {
   const limited = await checkRateLimit(c.env.RL_UPGRADE, upgradeKey(c, claims.sub));
   if (limited) return limited;
   const raw = await c.req.json().catch(() => ({}));
+  const ts = await verifyTurnstile(c.env.TURNSTILE_SECRET, turnstileTokenFrom(raw), clientIp(c));
+  if (!ts.ok) {
+    return c.json({ error: { code: "captcha_failed", message: "Captcha required" } }, 400);
+  }
   const parsed = UpgradeReq.safeParse(raw);
   if (!parsed.success) {
     return c.json({ error: { code: "bad_request", message: parsed.error.message } }, 400);
@@ -134,8 +163,14 @@ protectedRoutes.post("/upgrade", async (c) => {
     name: username,
     isGuest: false,
   });
-  const body: AuthRes = { token, user: { userId: claims.sub, name: username, isGuest: false } };
+  setTokenCookie(c, token);
+  const body: AuthRes = { user: { userId: claims.sub, name: username, isGuest: false } };
   return c.json(body);
+});
+
+protectedRoutes.post("/logout", (c) => {
+  clearTokenCookie(c);
+  return c.json({ ok: true });
 });
 
 authRoutes.route("/", protectedRoutes);

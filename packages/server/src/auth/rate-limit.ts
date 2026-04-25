@@ -33,3 +33,8 @@ export function guestKey(c: Context): string {
 export function upgradeKey(c: Context, userId: string): string {
   return `upgrade:${clientIp(c)}:${userId}`;
 }
+
+export function roomCreateKey(userId: string): string {
+  // Key by userId so authenticated abuse can't sneak past via VPN-hopping.
+  return `room:${userId}`;
+}

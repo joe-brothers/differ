@@ -138,18 +138,16 @@ export class Game {
   // (capacity = 1), so the client just connects and waits for game_start.
   async startSinglePlayer(): Promise<void> {
     await this.sceneManager.switchTo(LoadingScene);
-    const token = authState.getToken();
-    if (!token) throw new Error("No auth token");
+    if (!authState.isAuthenticated()) throw new Error("Not authenticated");
 
-    const { roomCode } = await roomApi.create({ mode: "single" }, token);
+    const { roomCode } = await roomApi.create({ mode: "single" });
     await this.connectAndPlay(roomCode, "single");
   }
 
   // Create a new 1v1 room and share the code with a friend.
   async createRoom1v1(): Promise<string> {
-    const token = authState.getToken();
-    if (!token) throw new Error("No auth token");
-    const { roomCode } = await roomApi.create({ mode: "1v1" }, token);
+    if (!authState.isAuthenticated()) throw new Error("Not authenticated");
+    const { roomCode } = await roomApi.create({ mode: "1v1" });
     await this.connectAndPlay(roomCode, "one_on_one");
     return roomCode;
   }
@@ -169,11 +167,10 @@ export class Game {
     gameType: GameType,
     options: { resume?: boolean } = {},
   ): Promise<boolean> {
-    const token = authState.getToken();
-    if (!token) throw new Error("No auth token");
+    if (!authState.isAuthenticated()) throw new Error("Not authenticated");
 
     this.teardownSocket();
-    const socket = new RoomSocket(roomApi.wsUrl(roomCode), token);
+    const socket = new RoomSocket(roomApi.wsUrl(roomCode));
     this.socket = socket;
 
     // `game_start` is emitted by the server on both first-game auto-start

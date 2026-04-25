@@ -9,10 +9,13 @@ export interface Env {
   RL_LOGIN: RateLimit;
   RL_GUEST: RateLimit;
   RL_UPGRADE: RateLimit;
+  RL_ROOM: RateLimit;
 
   JWT_SECRET: string; // secret, set via `wrangler secret put`
   JWT_ISSUER: string;
   CDN_BASE: string;
+  ALLOWED_ORIGINS: string; // comma-separated; empty = allow any (dev)
+  TURNSTILE_SECRET: string; // empty = disabled (dev)
 }
 
 export interface JwtClaims {

@@ -8,8 +8,10 @@ export const PublicUser = z.object({
 });
 export type PublicUser = z.infer<typeof PublicUser>;
 
+// Token is delivered exclusively via httpOnly cookie (Set-Cookie) so it
+// stays inaccessible to JS / XSS. The response body only echoes the public
+// user info the client needs to render UI.
 export const AuthRes = z.object({
-  token: z.string(),
   user: PublicUser,
 });
 export type AuthRes = z.infer<typeof AuthRes>;

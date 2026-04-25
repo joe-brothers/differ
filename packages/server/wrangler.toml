@@ -6,6 +6,14 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 JWT_ISSUER = "differ"
 CDN_BASE = "https://differ-assets.joe-brothers.com"
+# Comma-separated list of origins allowed to call this API. Empty in dev to
+# permit any origin (handled in code). For production, set to the prod web
+# origin (and staging if applicable).
+ALLOWED_ORIGINS = ""
+# Optional: when set, require Cloudflare Turnstile token on auth endpoints.
+# Empty disables verification (dev). Use `wrangler secret put TURNSTILE_SECRET`
+# in prod.
+TURNSTILE_SECRET = ""
 
 # Local dev uses same bindings; wrangler d1 --local persists to .wrangler/
 [[d1_databases]]
@@ -40,6 +48,12 @@ name = "RL_UPGRADE"
 type = "ratelimit"
 namespace_id = "1003"
 simple = { limit = 5, period = 60 }
+
+[[unsafe.bindings]]
+name = "RL_ROOM"
+type = "ratelimit"
+namespace_id = "1004"
+simple = { limit = 10, period = 60 }
 
 [observability]
 enabled = true

@@ -144,7 +144,7 @@ export class AuthScene extends Container implements IScene {
       try {
         if (isSignUp) {
           // Signup = create a guest account, then upgrade it with credentials.
-          if (!authState.getToken()) {
+          if (!authState.isAuthenticated()) {
             await authState.createGuest();
           }
           await authState.upgrade(username, password);

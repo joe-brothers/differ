@@ -48,8 +48,18 @@ const GAME_TIMEOUT_MS = 10 * 60 * 1000; // 10 min hard cap
 // wall-clock moment. The client counts down to `startedAt`.
 const START_COUNTDOWN_MS = 3500;
 
+// Click anti-abuse: per-player sliding window. Humans cap around 8-10 clicks
+// per second; bots brute-forcing pixel grids go far higher.
+const CLICK_WINDOW_MS = 1000;
+const CLICK_LIMIT_PER_WINDOW = 12;
+// Per-message size cap for malformed/oversized payloads.
+const MAX_WS_MESSAGE_BYTES = 4 * 1024;
+
 export class GameRoom implements DurableObject {
   private room: StoredRoom | null = null;
+  // In-memory click timestamps per user. Cleared when DO hibernates, which is
+  // fine — hibernation already throttles activity, and the cap is per second.
+  private clickWindow: Map<string, number[]> = new Map();
 
   constructor(
     private readonly state: DurableObjectState,
@@ -74,9 +84,21 @@ export class GameRoom implements DurableObject {
     const upgrade = req.headers.get("Upgrade");
     if (upgrade?.toLowerCase() === "websocket") {
       if (!this.room) return new Response("Room not initialized", { status: 404 });
+      // Auth is performed by the worker layer before delegating here. We
+      // re-verify (defense in depth) and bind claims to the socket so the
+      // hello handshake doesn't have to carry the token.
+      const token = req.headers.get("X-Auth-Token");
+      if (!token) return new Response("Unauthenticated", { status: 401 });
+      const claims = await verifyToken(this.env.JWT_SECRET, token);
+      if (!claims) return new Response("Invalid token", { status: 401 });
+
       const pair = new WebSocketPair();
       const [client, server] = [pair[0], pair[1]];
       this.state.acceptWebSocket(server);
+      server.serializeAttachment({
+        userId: claims.sub,
+        name: claims.name,
+      } satisfies SocketAttachment);
       return new Response(null, { status: 101, webSocket: client });
     }
 
@@ -89,6 +111,12 @@ export class GameRoom implements DurableObject {
     if (!this.room) {
       this.sendError(ws, "no_room", "Room no longer exists");
       ws.close(1011, "no_room");
+      return;
+    }
+    const size = typeof data === "string" ? data.length : data.byteLength;
+    if (size > MAX_WS_MESSAGE_BYTES) {
+      this.sendError(ws, "msg_too_large", "Message exceeds size limit");
+      ws.close(1009, "too_large");
       return;
     }
     let parsed;
@@ -106,15 +134,15 @@ export class GameRoom implements DurableObject {
     const msg = parsed.data;
 
     const attachment = ws.deserializeAttachment() as SocketAttachment | null;
-
-    if (msg.kind === "hello") {
-      await this.handleHello(ws, msg.token);
+    if (!attachment) {
+      // Should not happen — attachment is set during the upgrade handshake.
+      this.sendError(ws, "unauthenticated", "Socket not authenticated");
+      ws.close(1008, "unauthenticated");
       return;
     }
 
-    if (!attachment) {
-      this.sendError(ws, "no_hello", "Send hello first");
-      ws.close(1008, "no_hello");
+    if (msg.kind === "hello") {
+      await this.handleHello(ws, attachment);
       return;
     }
 
@@ -266,21 +294,16 @@ export class GameRoom implements DurableObject {
     });
   }
 
-  private async handleHello(ws: WebSocket, token: string): Promise<void> {
-    const claims = await verifyToken(this.env.JWT_SECRET, token);
-    if (!claims) {
-      this.sendError(ws, "unauthenticated", "Invalid token");
-      ws.close(1008, "unauthenticated");
-      return;
-    }
+  private async handleHello(ws: WebSocket, attachment: SocketAttachment): Promise<void> {
     if (!this.room) {
       this.sendError(ws, "no_room", "Room missing");
       ws.close(1011);
       return;
     }
+    const { userId, name } = attachment;
 
     const capacity = this.room.mode === "single" ? 1 : 2;
-    const existing = this.room.players[claims.sub];
+    const existing = this.room.players[userId];
     if (!existing) {
       if (Object.keys(this.room.players).length >= capacity) {
         this.sendError(ws, "room_full", "Room full");
@@ -292,9 +315,9 @@ export class GameRoom implements DurableObject {
         ws.close(1008, "in_progress");
         return;
       }
-      this.room.players[claims.sub] = {
-        userId: claims.sub,
-        name: claims.name,
+      this.room.players[userId] = {
+        userId,
+        name,
         ready: false,
         foundPerPuzzle: {},
         elapsedMs: null,
@@ -305,7 +328,7 @@ export class GameRoom implements DurableObject {
     for (const other of this.state.getWebSockets()) {
       if (other === ws) continue;
       const a = other.deserializeAttachment() as SocketAttachment | null;
-      if (a?.userId === claims.sub) {
+      if (a?.userId === userId) {
         try {
           other.close(4001, "replaced");
         } catch {
@@ -314,20 +337,18 @@ export class GameRoom implements DurableObject {
       }
     }
 
-    ws.serializeAttachment({ userId: claims.sub, name: claims.name });
-
     if (!existing) {
       // Brand new seat.
-      this.broadcastExcept(claims.sub, {
+      this.broadcastExcept(userId, {
         kind: "player_joined",
-        player: { userId: claims.sub, name: claims.name, ready: false, online: true },
+        player: { userId, name, ready: false, online: true },
       });
     } else if (this.room.status === "in_progress") {
       // Reconnect during an active game.
-      this.broadcastExcept(claims.sub, { kind: "player_online", userId: claims.sub });
+      this.broadcastExcept(userId, { kind: "player_online", userId });
     }
 
-    this.send(ws, this.buildWelcome(claims.sub));
+    this.send(ws, this.buildWelcome(userId));
     this.bumpActivity();
     await this.persist();
 
@@ -390,6 +411,10 @@ export class GameRoom implements DurableObject {
     if (this.room.startedAt && Date.now() < this.room.startedAt) return;
     const player = this.room.players[userId];
     if (!player || player.elapsedMs !== null) return;
+
+    // Sliding-window click rate limit. Bots brute-forcing the diff grid will
+    // blow past this; humans don't notice it.
+    if (this.isClickRateLimited(userId)) return;
 
     const round = this.room.puzzles[puzzleIdx];
     if (!round) return;
@@ -562,6 +587,23 @@ export class GameRoom implements DurableObject {
 
   private bumpActivity(): void {
     if (this.room) this.room.lastActivityAt = Date.now();
+  }
+
+  private isClickRateLimited(userId: string): boolean {
+    const now = Date.now();
+    const cutoff = now - CLICK_WINDOW_MS;
+    const stamps = this.clickWindow.get(userId) ?? [];
+    // Drop stamps that fell out of the window.
+    let i = 0;
+    while (i < stamps.length && stamps[i]! < cutoff) i++;
+    const recent = i === 0 ? stamps : stamps.slice(i);
+    if (recent.length >= CLICK_LIMIT_PER_WINDOW) {
+      this.clickWindow.set(userId, recent);
+      return true;
+    }
+    recent.push(now);
+    this.clickWindow.set(userId, recent);
+    return false;
   }
 
   private async persist(): Promise<void> {

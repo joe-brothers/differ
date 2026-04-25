@@ -23,17 +23,19 @@ export class ApiError extends Error {
 interface RequestOpts {
   method?: string;
   body?: unknown;
-  token?: string | null;
 }
 
 async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
-  if (opts.token) headers["Authorization"] = `Bearer ${opts.token}`;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: opts.method ?? "GET",
     headers,
+    // The auth token is in an httpOnly cookie set by the server. `include`
+    // makes the browser attach it on every request, including cross-origin
+    // ones (with proper CORS). Same-origin same-domain just keeps the cookie.
+    credentials: "include",
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
   });
   const text = await res.text();
@@ -53,21 +55,27 @@ export const authApi = {
   login(req: LoginReq): Promise<AuthRes> {
     return request<AuthRes>("/auth/login", { method: "POST", body: req });
   },
-  upgrade(req: UpgradeReq, token: string): Promise<AuthRes> {
-    return request<AuthRes>("/auth/upgrade", { method: "POST", body: req, token });
+  upgrade(req: UpgradeReq): Promise<AuthRes> {
+    return request<AuthRes>("/auth/upgrade", { method: "POST", body: req });
   },
-  me(token: string): Promise<{ user: PublicUser }> {
-    return request<{ user: PublicUser }>("/auth/me", { token });
+  me(): Promise<{ user: PublicUser }> {
+    return request<{ user: PublicUser }>("/auth/me");
+  },
+  logout(): Promise<{ ok: true }> {
+    return request<{ ok: true }>("/auth/logout", { method: "POST" });
   },
 };
 
 export const roomApi = {
-  create(req: CreateRoomReq, token: string): Promise<CreateRoomRes> {
-    return request<CreateRoomRes>("/rooms", { method: "POST", body: req, token });
+  create(req: CreateRoomReq): Promise<CreateRoomRes> {
+    return request<CreateRoomRes>("/rooms", { method: "POST", body: req });
   },
   wsUrl(code: string): string {
-    const base = API_BASE_URL.replace(/^http/, "ws");
-    return `${base}/rooms/${code}/ws`;
+    // API_BASE_URL is "" by default (same-origin via vite proxy or prod
+    // co-deploy). Synthesize an absolute ws(s):// URL from window.location.
+    if (API_BASE_URL) return `${API_BASE_URL.replace(/^http/, "ws")}/rooms/${code}/ws`;
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${proto}://${window.location.host}/rooms/${code}/ws`;
   },
 };
 

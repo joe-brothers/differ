@@ -1,6 +1,7 @@
-// Server configuration
-export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://127.0.0.1:8787";
+// Server configuration. Empty default = same-origin requests. Dev relies on
+// the Vite proxy (vite.config.ts), prod relies on deploying API on the same
+// registrable domain. Override via VITE_API_BASE_URL only for cross-origin.
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
 // CDN and image configuration
 export const CDN_BASE = "https://differ-assets.joe-brothers.com";

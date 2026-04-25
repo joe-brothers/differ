@@ -3,9 +3,10 @@ import { Puzzle, GameMode } from "./game.js";
 
 // ─── Client → Server ────────────────────────────────────────────────────────
 
+// Auth is performed at the WebSocket upgrade (cookie/header). `hello` is a
+// pure handshake — it tells the server "I'm ready, send me the welcome".
 export const ClientHello = z.object({
   kind: z.literal("hello"),
-  token: z.string(),
 });
 export type ClientHello = z.infer<typeof ClientHello>;
 

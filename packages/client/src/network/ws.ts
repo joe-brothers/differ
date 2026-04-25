@@ -3,17 +3,17 @@ import { EventEmitter } from "pixi.js";
 
 // Wraps a single WebSocket connection to a GameRoom DO.
 // Emits typed server messages as events keyed by `kind`.
+// Auth happens via cookie at the WebSocket upgrade — no token in the URL or
+// in any client message. The browser attaches the cookie automatically.
 export class RoomSocket extends EventEmitter {
   private ws: WebSocket | null = null;
-  private token: string;
   private url: string;
   private opened = false;
   private closed = false;
 
-  constructor(url: string, token: string) {
+  constructor(url: string) {
     super();
     this.url = url;
-    this.token = token;
   }
 
   connect(): Promise<void> {
@@ -22,7 +22,9 @@ export class RoomSocket extends EventEmitter {
       this.ws = ws;
       ws.addEventListener("open", () => {
         this.opened = true;
-        ws.send(JSON.stringify({ kind: "hello", token: this.token } satisfies ClientMsg));
+        // Pure handshake — the server already knows who we are from the
+        // upgrade-time cookie verification.
+        ws.send(JSON.stringify({ kind: "hello" } satisfies ClientMsg));
         resolve();
       });
       ws.addEventListener("message", (ev) => {
