@@ -1,4 +1,4 @@
-import { Application, Container, Assets, Graphics, Sprite, Text } from "pixi.js";
+import { Application, Container, Assets, Graphics, Sprite } from "pixi.js";
 import type { IScene } from "../types";
 import {
   IMAGE_WIDTH,
@@ -7,8 +7,6 @@ import {
   UI_PADDING,
   WRONG_CLICK_COOLDOWN_MS,
   IMAGES_PER_GAME,
-  TOTAL_DIFFS_PER_GAME,
-  COLORS,
 } from "../constants";
 import { gameState } from "../managers/GameStateManager";
 import { authState } from "../managers/AuthStateManager";
@@ -16,14 +14,13 @@ import { game } from "../core/Game";
 import { ImagePanel } from "../components/ImagePanel";
 import { MaskedDiffSprite } from "../components/MaskedDiffSprite";
 import { DiffMarker } from "../components/DiffMarker";
-import { Timer } from "../components/Timer";
 import { NavButtons } from "../components/NavButtons";
-import { ProgressDisplay } from "../components/ProgressDisplay";
-import { MenuOverlay } from "../components/MenuOverlay";
 import { MenuIcon } from "../components/MenuIcon";
 import { CelebrationEffect } from "../components/CelebrationEffect";
-import { GameCompleteScreen } from "../components/GameCompleteScreen";
 import { CountdownOverlay } from "../components/CountdownOverlay";
+import { GameHud } from "../ui/dom/GameHud";
+import { PauseModal } from "../ui/dom/PauseModal";
+import { GameCompleteModal } from "../ui/dom/GameCompleteModal";
 
 export class GameScene extends Container implements IScene {
   private app: Application;
@@ -37,22 +34,20 @@ export class GameScene extends Container implements IScene {
   private rightMarkersContainer: Container;
   private rightHitArea: Container | null = null;
 
-  // UI
+  // UI (Pixi: in-canvas controls)
   private uiLayer: Container;
-  private timer: Timer;
   private navButtons: NavButtons;
-  private progressDisplay: ProgressDisplay;
   private menuIcon: MenuIcon;
 
-  // Multiplayer UI
-  private opponentProgressText: Text | null = null;
+  // UI (DOM: text-heavy HUD + modals — sharper text, native styling)
+  private hud: GameHud;
+  private pauseModal: PauseModal;
+  private gameCompleteModal: GameCompleteModal;
 
   // Overlays
   private overlayLayer: Container;
   private countdownOverlay: CountdownOverlay;
-  private menuOverlay: MenuOverlay;
   private celebrationEffect: CelebrationEffect;
-  private gameCompleteScreen: GameCompleteScreen;
 
   // Placeholder
   private placeholderContainer: Container;
@@ -89,14 +84,15 @@ export class GameScene extends Container implements IScene {
     this.overlayLayer = new Container();
     this.placeholderContainer = new Container();
 
-    this.timer = new Timer();
     this.navButtons = new NavButtons();
-    this.progressDisplay = new ProgressDisplay();
     this.menuIcon = new MenuIcon();
     this.countdownOverlay = new CountdownOverlay(app.screen.width, app.screen.height);
-    this.menuOverlay = new MenuOverlay(app.screen.width, app.screen.height);
     this.celebrationEffect = new CelebrationEffect();
-    this.gameCompleteScreen = new GameCompleteScreen(app.screen.width, app.screen.height);
+
+    const isOneOnOne = gameState.getState().gameType === "one_on_one";
+    this.hud = new GameHud({ showOpponent: isOneOnOne });
+    this.pauseModal = new PauseModal();
+    this.gameCompleteModal = new GameCompleteModal();
 
     this.addChild(this.placeholderContainer, this.gameArea, this.uiLayer, this.overlayLayer);
   }
@@ -172,13 +168,8 @@ export class GameScene extends Container implements IScene {
   }
 
   private setupUI(): void {
-    this.timer.position.set(UI_PADDING, UI_PADDING);
-    this.uiLayer.addChild(this.timer);
-
-    this.progressDisplay.position.set(this.app.screen.width / 2 - 40, UI_PADDING);
-    this.uiLayer.addChild(this.progressDisplay);
-
     const state = gameState.getState();
+
     if (state.gameType !== "one_on_one") {
       this.menuIcon.position.set(this.app.screen.width - UI_PADDING - 44, UI_PADDING);
       this.menuIcon.setCallback(() => this.showPauseMenu());
@@ -197,27 +188,17 @@ export class GameScene extends Container implements IScene {
     this.uiLayer.addChild(this.navButtons);
 
     if (state.gameType === "one_on_one") {
-      this.opponentProgressText = new Text({
-        text: `Opponent ${state.opponentFoundCount}/${TOTAL_DIFFS_PER_GAME}`,
-        style: {
-          fontFamily: "Arial, sans-serif",
-          fontSize: 16,
-          fill: COLORS.textSecondary,
-        },
-      });
-      // Right-aligned at top-right (menu icon is hidden in 1v1 mode).
-      this.opponentProgressText.anchor.set(1, 0);
-      this.opponentProgressText.position.set(this.app.screen.width - UI_PADDING, UI_PADDING);
-      this.uiLayer.addChild(this.opponentProgressText);
+      this.hud.updateOpponent(state.opponentFoundCount, true);
     }
 
     // Hydrate my progress count too (non-zero on resume from a mid-game
     // reconnect where some diffs were already found before the reload).
-    this.progressDisplay.updateFoundCount(state.foundCount);
+    this.hud.updateFoundCount(state.foundCount);
+    this.hud.updateImageIndex(state.currentImageIndex);
   }
 
   private setupOverlays(): void {
-    this.menuOverlay.setCallbacks(
+    this.pauseModal.setCallbacks(
       () => this.resumeGame(),
       () => game.showMainMenu(),
     );
@@ -226,30 +207,28 @@ export class GameScene extends Container implements IScene {
     if (state.gameType === "one_on_one") {
       // Rematch path: stay in the same room; send `ready` and wait for the
       // opponent. Game.ts handles the transition on the next `game_start`.
-      this.gameCompleteScreen.setCallbacks(
+      this.gameCompleteModal.setCallbacks(
         () => this.requestRematch(),
         () => game.showMainMenu(),
       );
     } else {
-      this.gameCompleteScreen.setCallbacks(
+      this.gameCompleteModal.setCallbacks(
         () => game.startSinglePlayer(),
         () => game.showMainMenu(),
       );
     }
     this.overlayLayer.addChild(this.countdownOverlay);
-    this.overlayLayer.addChild(this.menuOverlay);
     this.overlayLayer.addChild(this.celebrationEffect);
-    this.overlayLayer.addChild(this.gameCompleteScreen);
   }
 
   private requestRematch(): void {
     game.sendReady();
-    this.gameCompleteScreen.markRematchPending();
+    this.gameCompleteModal.markRematchPending();
   }
 
   private setupStateListeners(): void {
     gameState.on("differenceFound", ({ diffIndex, total }) => {
-      this.progressDisplay.updateFoundCount(total);
+      this.hud.updateFoundCount(total);
       this.addMarkerForDiff(diffIndex);
     });
 
@@ -270,7 +249,7 @@ export class GameScene extends Container implements IScene {
 
     gameState.on("imageChanged", (index: number) => {
       this.loadCurrentImage();
-      this.progressDisplay.updateImageIndex(index);
+      this.hud.updateImageIndex(index);
       this.navButtons.updateState(index, IMAGES_PER_GAME);
     });
 
@@ -283,6 +262,12 @@ export class GameScene extends Container implements IScene {
     gameState.on("opponentDifferenceFound", () => {
       this.refreshOpponentText();
     });
+  }
+
+  private refreshOpponentText(): void {
+    const state = gameState.getState();
+    if (state.gameType !== "one_on_one") return;
+    this.hud.updateOpponent(state.opponentFoundCount, this.opponentOnline);
   }
 
   private setupSocketListeners(): void {
@@ -327,11 +312,11 @@ export class GameScene extends Container implements IScene {
 
       if (state.gameType === "one_on_one") {
         const isWin = msg.winnerId === myId;
-        this.gameCompleteScreen.showResult(isWin ? "win" : "lose", myElapsedSec, {
+        this.gameCompleteModal.showResult(isWin ? "win" : "lose", myElapsedSec, {
           playAgainLabel: "Rematch",
         });
       } else {
-        this.gameCompleteScreen.show(myElapsedSec);
+        this.gameCompleteModal.show(myElapsedSec);
       }
     };
 
@@ -368,16 +353,6 @@ export class GameScene extends Container implements IScene {
   private setOpponentOnline(online: boolean): void {
     this.opponentOnline = online;
     this.refreshOpponentText();
-  }
-
-  private refreshOpponentText(): void {
-    if (!this.opponentProgressText) return;
-    const state = gameState.getState();
-    const base = `Opponent ${state.opponentFoundCount}/${TOTAL_DIFFS_PER_GAME}`;
-    this.opponentProgressText.text = this.opponentOnline ? base : `${base} (Disconnected)`;
-    this.opponentProgressText.style.fill = this.opponentOnline
-      ? COLORS.textSecondary
-      : COLORS.error;
   }
 
   private loadCurrentImage(): void {
@@ -534,38 +509,32 @@ export class GameScene extends Container implements IScene {
     gameState.pause();
     this.createPlaceholders();
     this.gameArea.visible = false;
-    this.menuOverlay.show();
+    this.pauseModal.show();
   }
 
   private resumeGame(): void {
     gameState.resume();
     this.placeholderContainer.removeChildren();
     this.gameArea.visible = true;
-    this.menuOverlay.hide();
+    this.pauseModal.hide();
   }
 
   update(_deltaTime: number): void {
     if (this.timerFrozenAtSec != null) {
-      this.timer.setTime(this.timerFrozenAtSec);
+      this.hud.setTime(this.timerFrozenAtSec);
       return;
     }
     const state = gameState.getState();
     if (!state.serverStartedAt) return;
     const elapsedSec = Math.max(0, (Date.now() - state.serverStartedAt) / 1000);
-    this.timer.setTime(elapsedSec);
+    this.hud.setTime(elapsedSec);
   }
 
   resize(width: number, height: number): void {
     this.setupLayout();
-    this.progressDisplay.position.set(width / 2 - 40, UI_PADDING);
     this.menuIcon.position.set(width - UI_PADDING - 44, UI_PADDING);
     this.navButtons.position.set(width / 2 - 55, height - UI_PADDING - 50);
-    if (this.opponentProgressText) {
-      this.opponentProgressText.position.set(width - UI_PADDING, UI_PADDING);
-    }
     this.countdownOverlay.resize(width, height);
-    this.menuOverlay.resize(width, height);
-    this.gameCompleteScreen.resize(width, height);
 
     if (this.placeholderContainer.children.length > 0) {
       this.placeholderContainer.removeChildren();
@@ -583,6 +552,10 @@ export class GameScene extends Container implements IScene {
     this.offPlayerLeft?.();
     this.offPlayerOffline?.();
     this.offPlayerOnline?.();
+
+    this.hud.destroy();
+    this.pauseModal.destroy();
+    this.gameCompleteModal.destroy();
 
     gameState.removeAllListeners();
     this.removeAllListeners();
