@@ -1,5 +1,5 @@
 import { useUIStore, type OverlayModal } from "../store";
-import { cardStyle, CSS, modalBackdropStyle } from "../styles";
+import { cardStyle, CSS, FONT_MONO, modalBackdropStyle } from "../styles";
 import { Button } from "./Button";
 
 function formatTime(elapsedSec: number): string {
@@ -20,17 +20,17 @@ function getCopy(
 ): Copy {
   if (modal.type === "complete-single") {
     return {
-      title: "Congratulations!",
+      title: "Congratulations",
       titleColor: CSS.success,
-      subtitle: "You found all differences!",
+      subtitle: "You found all differences.",
       playAgainLabel: "Play Again",
     };
   }
   const isWin = modal.result === "win";
   return {
-    title: isWin ? "You Win!" : "You Lost!",
+    title: isWin ? "You Win" : "You Lost",
     titleColor: isWin ? CSS.success : CSS.error,
-    subtitle: isWin ? "You found all differences first!" : "Your opponent finished first!",
+    subtitle: isWin ? "You found all differences first." : "Your opponent finished first.",
     playAgainLabel: "Rematch",
   };
 }
@@ -48,25 +48,29 @@ export function GameCompleteModal() {
   const playAgainLabel = rematchPending ? "Waiting for opponent..." : copy.playAgainLabel;
 
   return (
-    <div style={modalBackdropStyle(0.85)}>
-      <div style={{ ...cardStyle, minWidth: 400 }}>
+    <div style={modalBackdropStyle(0.5)}>
+      <div style={{ ...cardStyle, minWidth: 400, gap: 12 }}>
         <h2
           style={{
             margin: 0,
-            fontSize: 36,
-            fontWeight: "bold",
+            fontSize: 28,
+            lineHeight: "36px",
+            fontWeight: 500,
             color: copy.titleColor,
           }}
         >
           {copy.title}
         </h2>
-        <p style={{ margin: 0, fontSize: 20, color: CSS.textSecondary }}>{copy.subtitle}</p>
+        <p style={{ margin: 0, fontSize: 14, color: CSS.textSecondary }}>{copy.subtitle}</p>
 
-        <div style={{ marginTop: 12, fontSize: 18, color: CSS.textSecondary }}>Your Time</div>
+        <div style={{ marginTop: 12, fontSize: 12, color: CSS.textSecondary, letterSpacing: 0.5 }}>
+          YOUR TIME
+        </div>
         <div
           style={{
-            fontSize: 56,
-            fontWeight: "bold",
+            fontFamily: FONT_MONO,
+            fontSize: 48,
+            fontWeight: 500,
             color: CSS.text,
             lineHeight: 1.1,
             fontVariantNumeric: "tabular-nums",
@@ -78,10 +82,13 @@ export function GameCompleteModal() {
         {rank !== undefined && (
           <div
             style={{
-              marginTop: 8,
-              fontSize: 28,
-              fontWeight: "bold",
+              marginTop: 4,
+              padding: "4px 12px",
+              borderRadius: 9999,
+              fontSize: 14,
+              fontWeight: 500,
               color: rank <= 3 ? CSS.gold : CSS.primary,
+              backgroundColor: rank <= 3 ? CSS.warningBg : CSS.primarySoft,
             }}
           >
             Rank #{rank}
@@ -91,11 +98,16 @@ export function GameCompleteModal() {
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
           <Button
             label={playAgainLabel}
-            color={CSS.success}
+            color={CSS.primary}
             disabled={rematchPending}
             onClick={() => callbacks.onPlayAgain?.()}
           />
-          <Button label="Main Menu" color={CSS.primary} onClick={() => callbacks.onMainMenu?.()} />
+          <Button
+            label="Main Menu"
+            color={CSS.surface}
+            onClick={() => callbacks.onMainMenu?.()}
+            style={{ color: CSS.text, border: `1px solid ${CSS.border}` }}
+          />
         </div>
       </div>
     </div>

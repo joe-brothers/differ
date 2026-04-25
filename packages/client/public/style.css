@@ -1,8 +1,17 @@
 body {
   margin: 0;
   padding: 0;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #000000;
+  color: #202124;
+  background-color: #ffffff;
+  font-family:
+    "Google Sans",
+    "Roboto",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #app {

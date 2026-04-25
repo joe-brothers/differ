@@ -1,3 +1,20 @@
+// Mirrors a subset of CSS tokens from src/ui/styles.ts. Kept inline so this
+// module stays a plain DOM helper with no React dependency.
+const TOKENS = {
+  surface: "#FFFFFF",
+  surfaceSunken: "#F1F3F4",
+  border: "#DADCE0",
+  borderStrong: "#BDC1C6",
+  text: "#202124",
+  textSecondary: "#5F6368",
+  primary: "#1A73E8",
+  primaryOn: "#FFFFFF",
+  error: "#D93025",
+} as const;
+
+const FONT_FAMILY =
+  '"Google Sans", "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
 export class HtmlOverlay {
   private container: HTMLDivElement;
 
@@ -15,6 +32,7 @@ export class HtmlOverlay {
       alignItems: "center",
       pointerEvents: "none",
       zIndex: "10",
+      fontFamily: FONT_FAMILY,
     });
     app?.appendChild(this.container);
   }
@@ -22,16 +40,19 @@ export class HtmlOverlay {
   createFormContainer(): HTMLDivElement {
     const card = document.createElement("div");
     Object.assign(card.style, {
-      backgroundColor: "#2a2a4e",
-      borderRadius: "16px",
-      padding: "40px",
+      backgroundColor: TOKENS.surface,
+      border: `1px solid ${TOKENS.border}`,
+      borderRadius: "12px",
+      padding: "32px",
       width: "360px",
       maxWidth: "90vw",
       display: "flex",
       flexDirection: "column",
-      gap: "16px",
+      gap: "12px",
       pointerEvents: "auto",
-      boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
+      boxShadow: "0 2px 6px 2px rgba(60,64,67,.10), 0 1px 2px 0 rgba(60,64,67,.06)",
+      color: TOKENS.text,
+      fontFamily: FONT_FAMILY,
     });
     this.container.appendChild(card);
     return card;
@@ -46,57 +67,92 @@ export class HtmlOverlay {
     input.placeholder = options.placeholder;
     input.name = options.name;
     Object.assign(input.style, {
-      padding: "12px 16px",
-      borderRadius: "8px",
-      border: "1px solid #3a3a6e",
-      backgroundColor: "#1a1a2e",
-      color: "#ffffff",
-      fontSize: "16px",
+      padding: "10px 12px",
+      height: "40px",
+      borderRadius: "4px",
+      border: `1px solid ${TOKENS.border}`,
+      backgroundColor: TOKENS.surface,
+      color: TOKENS.text,
+      fontFamily: FONT_FAMILY,
+      fontSize: "14px",
       outline: "none",
       width: "100%",
       boxSizing: "border-box",
+      transition: "border-color 80ms ease-out, box-shadow 80ms ease-out",
     });
     input.addEventListener("focus", () => {
-      input.style.borderColor = "#4a90d9";
+      input.style.borderColor = TOKENS.primary;
+      input.style.boxShadow = `0 0 0 2px ${TOKENS.primary}33`;
     });
     input.addEventListener("blur", () => {
-      input.style.borderColor = "#3a3a6e";
+      input.style.borderColor = TOKENS.border;
+      input.style.boxShadow = "none";
     });
     parent.appendChild(input);
     return input;
   }
 
-  createButton(parent: HTMLElement, text: string, color = "#4a90d9"): HTMLButtonElement {
+  createButton(
+    parent: HTMLElement,
+    text: string,
+    color: string = TOKENS.primary,
+  ): HTMLButtonElement {
     const button = document.createElement("button");
     button.textContent = text;
     Object.assign(button.style, {
-      padding: "12px 24px",
-      borderRadius: "8px",
+      padding: "10px 24px",
+      height: "40px",
+      borderRadius: "4px",
       border: "none",
       backgroundColor: color,
-      color: "#ffffff",
-      fontSize: "16px",
-      fontWeight: "bold",
+      color: TOKENS.primaryOn,
+      fontFamily: FONT_FAMILY,
+      fontSize: "14px",
+      fontWeight: "500",
+      letterSpacing: "0.25px",
       cursor: "pointer",
-      marginTop: "8px",
+      transition: "box-shadow 80ms ease-out",
+      boxShadow: "none",
     });
+    // State-layer hover/press: a translucent dark inset ring darkens the
+    // button uniformly without needing a per-color hover token.
     button.addEventListener("mouseenter", () => {
-      button.style.opacity = "0.85";
+      if (button.disabled) return;
+      button.style.boxShadow = "inset 0 0 0 9999px rgba(0,0,0,0.08)";
     });
     button.addEventListener("mouseleave", () => {
-      button.style.opacity = "1";
+      button.style.boxShadow = "none";
+    });
+    button.addEventListener("mousedown", () => {
+      if (button.disabled) return;
+      button.style.boxShadow = "inset 0 0 0 9999px rgba(0,0,0,0.16)";
+    });
+    button.addEventListener("mouseup", () => {
+      if (button.disabled) return;
+      button.style.boxShadow = "inset 0 0 0 9999px rgba(0,0,0,0.08)";
     });
     parent.appendChild(button);
+    return button;
+  }
+
+  // Outlined / "secondary" button variant — used for Back / Cancel actions.
+  // Callers previously achieved this by setting button.style.background to a
+  // muted color; expose it explicitly so styling stays in one place.
+  createSecondaryButton(parent: HTMLElement, text: string): HTMLButtonElement {
+    const button = this.createButton(parent, text, TOKENS.surface);
+    button.style.color = TOKENS.text;
+    button.style.border = `1px solid ${TOKENS.border}`;
     return button;
   }
 
   createErrorText(parent: HTMLElement): HTMLParagraphElement {
     const p = document.createElement("p");
     Object.assign(p.style, {
-      color: "#ff5252",
-      fontSize: "14px",
+      color: TOKENS.error,
+      fontFamily: FONT_FAMILY,
+      fontSize: "13px",
       margin: "0",
-      minHeight: "20px",
+      minHeight: "18px",
     });
     parent.appendChild(p);
     return p;

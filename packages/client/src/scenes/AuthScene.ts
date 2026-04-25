@@ -29,8 +29,8 @@ export class AuthScene extends Container implements IScene {
       text: "Find the Difference",
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 48,
-        fontWeight: "bold",
+        fontSize: 36,
+        fontWeight: "500",
         fill: COLORS.text,
       },
     });
@@ -57,17 +57,17 @@ export class AuthScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Welcome";
     Object.assign(heading.style, {
-      color: "#ffffff",
+      color: "#202124",
       margin: "0 0 12px 0",
-      fontSize: "24px",
+      fontSize: "22px",
+      fontWeight: "500",
       textAlign: "center",
     });
     card.appendChild(heading);
 
     const signInBtn = this.overlay.createButton(card, "Sign In");
     const signUpBtn = this.overlay.createButton(card, "Create Account");
-    const guestBtn = this.overlay.createButton(card, "Continue as Guest");
-    guestBtn.style.background = "#3a3a5e";
+    const guestBtn = this.overlay.createSecondaryButton(card, "Continue as Guest");
 
     const errText = this.overlay.createErrorText(card);
 
@@ -103,9 +103,10 @@ export class AuthScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = isSignUp ? "Create Account" : "Sign In";
     Object.assign(heading.style, {
-      color: "#ffffff",
+      color: "#202124",
       margin: "0 0 8px 0",
-      fontSize: "24px",
+      fontSize: "22px",
+      fontWeight: "500",
       textAlign: "center",
     });
     card.appendChild(heading);
@@ -123,8 +124,7 @@ export class AuthScene extends Container implements IScene {
 
     const errorText = this.overlay.createErrorText(card);
     const submitBtn = this.overlay.createButton(card, isSignUp ? "Create" : "Sign In");
-    const backBtn = this.overlay.createButton(card, "Back");
-    backBtn.style.background = "#3a3a5e";
+    const backBtn = this.overlay.createSecondaryButton(card, "Back");
 
     backBtn.addEventListener("click", () => {
       this.view = "chooser";

@@ -8,21 +8,21 @@ export class CountdownOverlay extends Container {
   constructor(screenWidth: number, screenHeight: number) {
     super();
 
-    // Semi-transparent background
+    // Semi-transparent background — Chromium charcoal scrim.
     this.background = new Graphics();
     this.background.rect(0, 0, screenWidth, screenHeight);
-    this.background.fill({ color: COLORS.overlay, alpha: 0.7 });
+    this.background.fill({ color: COLORS.overlay, alpha: 0.6 });
     this.background.eventMode = "static"; // Block clicks through
     this.addChild(this.background);
 
-    // Countdown text
+    // Countdown text — must remain white over the dark scrim.
     this.countdownText = new Text({
       text: "",
       style: {
         fontFamily: "Arial, sans-serif",
         fontSize: 120,
-        fontWeight: "bold",
-        fill: COLORS.text,
+        fontWeight: "500",
+        fill: COLORS.primaryOn,
       },
     });
     this.countdownText.anchor.set(0.5);
@@ -79,7 +79,7 @@ export class CountdownOverlay extends Container {
   resize(screenWidth: number, screenHeight: number): void {
     this.background.clear();
     this.background.rect(0, 0, screenWidth, screenHeight);
-    this.background.fill({ color: COLORS.overlay, alpha: 0.7 });
+    this.background.fill({ color: COLORS.overlay, alpha: 0.6 });
 
     this.countdownText.position.set(screenWidth / 2, screenHeight / 2);
   }

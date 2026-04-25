@@ -17,19 +17,46 @@ export const WRONG_CLICK_COOLDOWN_MS = 1000;
 
 // Visual styling
 export const MARKER_RADIUS = 25;
-export const MARKER_COLOR = 0xff0000;
+// Chromium "danger" red — used as the diff marker stroke for status alignment.
+export const MARKER_COLOR = 0xd93025;
 export const MARKER_STROKE_WIDTH = 4;
 
-// UI Colors
+// UI Colors — Pixi side mirror of CSS tokens in src/ui/styles.ts.
+// See DESIGN.md for the canonical palette.
 export const COLORS = {
-  background: 0x1a1a2e,
-  primary: 0x4a90d9,
-  primaryHover: 0x6ba3e0,
-  text: 0xffffff,
-  textSecondary: 0xcccccc,
-  overlay: 0x000000,
-  success: 0x4caf50,
-  error: 0xff5252,
+  // Surfaces
+  background: 0xffffff,
+  surface: 0xffffff,
+  surfaceMuted: 0xf8f9fa,
+  surfaceSunken: 0xf1f3f4,
+  border: 0xdadce0,
+  borderStrong: 0xbdc1c6,
+
+  // Text
+  text: 0x202124,
+  textSecondary: 0x5f6368,
+  textTertiary: 0x80868b,
+
+  // Accent
+  primary: 0x1a73e8,
+  primaryHover: 0x1b66c9,
+  primaryPressed: 0x1557b0,
+  primarySoft: 0xe8f0fe,
+  primaryOn: 0xffffff,
+
+  // Status
+  success: 0x188038,
+  successBg: 0xe6f4ea,
+  warning: 0xb06000,
+  warningBg: 0xfef7e0,
+  error: 0xd93025,
+  errorBg: 0xfce8e6,
+
+  // Modal scrim — neutral charcoal, not pure black.
+  overlay: 0x202124,
+
+  // Highlight (rank gold)
+  gold: 0xf9ab00,
 };
 
 // Layout

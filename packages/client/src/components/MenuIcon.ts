@@ -9,19 +9,21 @@ export class MenuIcon extends Container {
     super();
 
     const size = 44;
-    const padding = 10;
+    const padding = 12;
 
-    // Background
+    // Outlined "secondary" button — white surface with hairline border to
+    // match Chromium chrome buttons.
     this.bg = new Graphics();
-    this.bg.roundRect(0, 0, size, size, 8);
-    this.bg.fill(COLORS.primary);
+    this.bg.roundRect(0, 0, size, size, 4);
+    this.bg.fill(COLORS.surface);
+    this.bg.stroke({ color: COLORS.border, width: 1 });
     this.addChild(this.bg);
 
-    // Draw hamburger icon (three lines)
+    // Hamburger glyph
     const icon = new Graphics();
     const lineWidth = size - padding * 2;
-    const lineHeight = 3;
-    const gap = 6;
+    const lineHeight = 2;
+    const gap = 5;
     const startY = (size - lineHeight * 3 - gap * 2) / 2;
 
     for (let i = 0; i < 3; i++) {
@@ -30,20 +32,21 @@ export class MenuIcon extends Container {
     icon.fill(COLORS.text);
     this.addChild(icon);
 
-    // Make interactive
     this.eventMode = "static";
     this.cursor = "pointer";
 
     this.on("pointerover", () => {
       this.bg.clear();
-      this.bg.roundRect(0, 0, size, size, 8);
-      this.bg.fill(COLORS.primaryHover);
+      this.bg.roundRect(0, 0, size, size, 4);
+      this.bg.fill(COLORS.surfaceMuted);
+      this.bg.stroke({ color: COLORS.borderStrong, width: 1 });
     });
 
     this.on("pointerout", () => {
       this.bg.clear();
-      this.bg.roundRect(0, 0, size, size, 8);
-      this.bg.fill(COLORS.primary);
+      this.bg.roundRect(0, 0, size, size, 4);
+      this.bg.fill(COLORS.surface);
+      this.bg.stroke({ color: COLORS.border, width: 1 });
     });
 
     this.on("pointerdown", () => {

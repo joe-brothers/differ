@@ -31,8 +31,8 @@ export class MainMenuScene extends Container implements IScene {
       text: "Find the Difference",
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 48,
-        fontWeight: "bold",
+        fontSize: 36,
+        fontWeight: "500",
         fill: COLORS.text,
       },
     });
@@ -41,26 +41,38 @@ export class MainMenuScene extends Container implements IScene {
     this.addChild(this.title);
   }
 
+  private drawFilledButton(bg: Graphics, w: number, h: number, fill: number): void {
+    bg.clear();
+    bg.roundRect(-w / 2, -h / 2, w, h, 4);
+    bg.fill(fill);
+  }
+
+  private drawOutlinedButton(bg: Graphics, w: number, h: number, fill: number): void {
+    bg.clear();
+    bg.roundRect(-w / 2, -h / 2, w, h, 4);
+    bg.fill(fill);
+    bg.stroke({ color: COLORS.border, width: 1 });
+  }
+
   private createSprintButton(): void {
     const buttonWidth = 250;
-    const buttonHeight = 60;
+    const buttonHeight = 48;
     const buttonX = this.app.screen.width / 2;
-    const buttonY = this.app.screen.height / 2 - 50;
+    const buttonY = this.app.screen.height / 2 - 40;
 
     this.sprintButton = new Container();
     this.sprintButton.position.set(buttonX, buttonY);
 
     const bg = new Graphics();
-    bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-    bg.fill(COLORS.primary);
+    this.drawFilledButton(bg, buttonWidth, buttonHeight, COLORS.primary);
 
     const text = new Text({
       text: "5 Sprint",
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 28,
-        fontWeight: "bold",
-        fill: COLORS.text,
+        fontSize: 16,
+        fontWeight: "500",
+        fill: COLORS.primaryOn,
       },
     });
     text.anchor.set(0.5);
@@ -70,14 +82,10 @@ export class MainMenuScene extends Container implements IScene {
     this.sprintButton.cursor = "pointer";
 
     this.sprintButton.on("pointerover", () => {
-      bg.clear();
-      bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-      bg.fill(COLORS.primaryHover);
+      this.drawFilledButton(bg, buttonWidth, buttonHeight, COLORS.primaryHover);
     });
     this.sprintButton.on("pointerout", () => {
-      bg.clear();
-      bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-      bg.fill(COLORS.primary);
+      this.drawFilledButton(bg, buttonWidth, buttonHeight, COLORS.primary);
     });
     this.sprintButton.on("pointerdown", () => {
       game.startSinglePlayer();
@@ -88,23 +96,22 @@ export class MainMenuScene extends Container implements IScene {
 
   private createMatchButton(): void {
     const buttonWidth = 250;
-    const buttonHeight = 60;
+    const buttonHeight = 48;
     const buttonX = this.app.screen.width / 2;
-    const buttonY = this.app.screen.height / 2 + 30;
+    const buttonY = this.app.screen.height / 2 + 16;
 
     this.matchButton = new Container();
     this.matchButton.position.set(buttonX, buttonY);
 
     const bg = new Graphics();
-    bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-    bg.fill(COLORS.success);
+    this.drawOutlinedButton(bg, buttonWidth, buttonHeight, COLORS.surface);
 
     const text = new Text({
       text: "1v1 Match",
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 28,
-        fontWeight: "bold",
+        fontSize: 16,
+        fontWeight: "500",
         fill: COLORS.text,
       },
     });
@@ -114,16 +121,11 @@ export class MainMenuScene extends Container implements IScene {
     this.matchButton.eventMode = "static";
     this.matchButton.cursor = "pointer";
 
-    const hoverColor = COLORS.success + 0x222222;
     this.matchButton.on("pointerover", () => {
-      bg.clear();
-      bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-      bg.fill(hoverColor);
+      this.drawOutlinedButton(bg, buttonWidth, buttonHeight, COLORS.surfaceMuted);
     });
     this.matchButton.on("pointerout", () => {
-      bg.clear();
-      bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-      bg.fill(COLORS.success);
+      this.drawOutlinedButton(bg, buttonWidth, buttonHeight, COLORS.surface);
     });
     this.matchButton.on("pointerdown", () => {
       game.showMatchmaking();
@@ -134,23 +136,23 @@ export class MainMenuScene extends Container implements IScene {
 
   private createLeaderboardButton(): void {
     const buttonWidth = 250;
-    const buttonHeight = 50;
+    const buttonHeight = 48;
     const buttonX = this.app.screen.width / 2;
-    const buttonY = this.app.screen.height / 2 + 110;
+    const buttonY = this.app.screen.height / 2 + 72;
 
     this.leaderboardButton = new Container();
     this.leaderboardButton.position.set(buttonX, buttonY);
 
     const bg = new Graphics();
-    bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-    bg.fill(0x3a3a5e);
+    this.drawOutlinedButton(bg, buttonWidth, buttonHeight, COLORS.surface);
 
     const text = new Text({
       text: "Leaderboard",
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 22,
-        fill: COLORS.textSecondary,
+        fontSize: 14,
+        fontWeight: "500",
+        fill: COLORS.primary,
       },
     });
     text.anchor.set(0.5);
@@ -160,14 +162,10 @@ export class MainMenuScene extends Container implements IScene {
     this.leaderboardButton.cursor = "pointer";
 
     this.leaderboardButton.on("pointerover", () => {
-      bg.clear();
-      bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-      bg.fill(0x4a4a6e);
+      this.drawOutlinedButton(bg, buttonWidth, buttonHeight, COLORS.primarySoft);
     });
     this.leaderboardButton.on("pointerout", () => {
-      bg.clear();
-      bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-      bg.fill(0x3a3a5e);
+      this.drawOutlinedButton(bg, buttonWidth, buttonHeight, COLORS.surface);
     });
     this.leaderboardButton.on("pointerdown", () => {
       game.showLeaderboard();
@@ -226,13 +224,13 @@ export class MainMenuScene extends Container implements IScene {
       this.title.position.set(width / 2, height / 4);
     }
     if (this.sprintButton) {
-      this.sprintButton.position.set(width / 2, height / 2 - 50);
+      this.sprintButton.position.set(width / 2, height / 2 - 40);
     }
     if (this.matchButton) {
-      this.matchButton.position.set(width / 2, height / 2 + 30);
+      this.matchButton.position.set(width / 2, height / 2 + 16);
     }
     if (this.leaderboardButton) {
-      this.leaderboardButton.position.set(width / 2, height / 2 + 110);
+      this.leaderboardButton.position.set(width / 2, height / 2 + 72);
     }
     if (this.usernameText) {
       this.usernameText.position.set(width - 20, 20);

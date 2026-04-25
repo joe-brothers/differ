@@ -46,8 +46,8 @@ export class LeaderboardScene extends Container implements IScene {
       text: "Leaderboard",
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 40,
-        fontWeight: "bold",
+        fontSize: 28,
+        fontWeight: "500",
         fill: COLORS.text,
       },
     });
@@ -82,15 +82,16 @@ export class LeaderboardScene extends Container implements IScene {
   private makeTab(label: string, w: number, h: number, onClick: () => void): Container {
     const button = new Container();
     const bg = new Graphics();
-    bg.roundRect(-w / 2, -h / 2, w, h, 8);
-    bg.fill(0x3a3a5e);
+    bg.roundRect(-w / 2, -h / 2, w, h, 4);
+    bg.fill(COLORS.surface);
+    bg.stroke({ color: COLORS.border, width: 1 });
 
     const text = new Text({
       text: label,
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 16,
-        fontWeight: "bold",
+        fontSize: 14,
+        fontWeight: "500",
         fill: COLORS.textSecondary,
       },
     });
@@ -111,9 +112,10 @@ export class LeaderboardScene extends Container implements IScene {
     const paint = (c: Container, active: boolean) => {
       const el = c as Container & { __bg: Graphics; __text: Text };
       el.__bg.clear();
-      el.__bg.roundRect(-70, -18, 140, 36, 8);
-      el.__bg.fill(active ? COLORS.primary : 0x3a3a5e);
-      el.__text.style.fill = active ? COLORS.text : COLORS.textSecondary;
+      el.__bg.roundRect(-70, -18, 140, 36, 4);
+      el.__bg.fill(active ? COLORS.primarySoft : COLORS.surface);
+      el.__bg.stroke({ color: active ? COLORS.primary : COLORS.border, width: 1 });
+      el.__text.style.fill = active ? COLORS.primary : COLORS.textSecondary;
     };
     paint(this.tabs.single, this.currentMode === "single");
     paint(this.tabs.onevone, this.currentMode === "1v1");
@@ -151,16 +153,16 @@ export class LeaderboardScene extends Container implements IScene {
     );
 
     const bg = new Graphics();
-    bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 8);
+    bg.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 4);
     bg.fill(COLORS.primary);
 
     const text = new Text({
       text: "Back",
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 18,
-        fontWeight: "bold",
-        fill: COLORS.text,
+        fontSize: 14,
+        fontWeight: "500",
+        fill: COLORS.primaryOn,
       },
     });
     text.anchor.set(0.5);
@@ -212,7 +214,7 @@ export class LeaderboardScene extends Container implements IScene {
 
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
-      const rankColor = entry.rank <= 3 ? 0xffd700 : COLORS.text;
+      const rankColor = entry.rank <= 3 ? COLORS.gold : COLORS.text;
       const rankStr = entry.rank.toString().padStart(3, " ");
       const nameStr = entry.name.padEnd(20, " ").slice(0, 20);
       const winsStr = entry.wins.toString().padStart(4, " ");

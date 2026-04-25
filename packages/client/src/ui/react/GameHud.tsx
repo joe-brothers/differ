@@ -1,6 +1,21 @@
 import { useUIStore } from "../store";
-import { CSS, FONT_FAMILY } from "../styles";
+import { CSS, FONT_FAMILY, FONT_MONO, RADIUS, SHADOW } from "../styles";
 import { IMAGES_PER_GAME, TOTAL_DIFFS_PER_GAME, UI_PADDING } from "../../constants";
+
+// Chromium-tracker-style chip: white surface, hairline border, soft shadow.
+const chip = {
+  background: CSS.surface,
+  border: `1px solid ${CSS.border}`,
+  borderRadius: `${RADIUS.pill}px`,
+  padding: "8px 14px",
+  boxShadow: SHADOW.s1,
+  fontFamily: FONT_FAMILY,
+  color: CSS.text,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  lineHeight: 1,
+} as const;
 
 export function GameHud() {
   const hudVisible = useUIStore((s) => s.hudVisible);
@@ -28,17 +43,17 @@ export function GameHud() {
         pointerEvents: "none",
         zIndex: 10,
         fontFamily: FONT_FAMILY,
-        color: CSS.text,
       }}
     >
       <div
         style={{
+          ...chip,
           position: "absolute",
           top: UI_PADDING,
           left: UI_PADDING,
-          fontSize: 28,
-          fontWeight: "bold",
-          lineHeight: 1,
+          fontFamily: FONT_MONO,
+          fontSize: 18,
+          fontWeight: 500,
           fontVariantNumeric: "tabular-nums",
         }}
       >
@@ -47,38 +62,50 @@ export function GameHud() {
 
       <div
         style={{
+          ...chip,
           position: "absolute",
           top: UI_PADDING,
           left: "50%",
           transform: "translateX(-50%)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "flex-start",
-          gap: 6,
-          lineHeight: 1,
+          gap: 12,
+          fontSize: 14,
+          fontWeight: 500,
         }}
       >
-        <div style={{ fontSize: 24, fontWeight: "bold", fontVariantNumeric: "tabular-nums" }}>
+        <span style={{ fontVariantNumeric: "tabular-nums" }}>
           {foundCount}/{TOTAL_DIFFS_PER_GAME}
-        </div>
-        <div style={{ fontSize: 20, color: CSS.textSecondary }}>
+        </span>
+        <span style={{ width: 1, height: 14, background: CSS.border }} />
+        <span style={{ color: CSS.textSecondary, fontWeight: 400 }}>
           Image {currentImageIndex + 1}/{IMAGES_PER_GAME}
-        </div>
+        </span>
       </div>
 
       {showOpponent && (
         <div
           style={{
+            ...chip,
             position: "absolute",
             top: UI_PADDING,
             right: UI_PADDING,
-            fontSize: 16,
-            lineHeight: 1,
-            color: opponentOnline ? CSS.textSecondary : CSS.error,
+            fontSize: 13,
+            color: opponentOnline ? CSS.text : CSS.error,
+            background: opponentOnline ? CSS.surface : CSS.errorBg,
+            borderColor: opponentOnline ? CSS.border : CSS.error,
           }}
         >
-          Opponent {opponentFoundCount}/{TOTAL_DIFFS_PER_GAME}
-          {!opponentOnline && " (Disconnected)"}
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: opponentOnline ? CSS.success : CSS.error,
+            }}
+          />
+          <span>
+            Opponent {opponentFoundCount}/{TOTAL_DIFFS_PER_GAME}
+          </span>
+          {!opponentOnline && <span style={{ color: CSS.error }}>(Disconnected)</span>}
         </div>
       )}
     </div>

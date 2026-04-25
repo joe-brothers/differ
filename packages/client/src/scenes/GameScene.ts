@@ -7,6 +7,7 @@ import {
   UI_PADDING,
   WRONG_CLICK_COOLDOWN_MS,
   IMAGES_PER_GAME,
+  COLORS,
 } from "../constants";
 import { gameState } from "../managers/GameStateManager";
 import { authState } from "../managers/AuthStateManager";
@@ -156,14 +157,14 @@ export class GameScene extends Container implements IScene {
 
     const leftPlaceholder = new Graphics();
     leftPlaceholder.roundRect(0, 0, scaledWidth, scaledHeight, 8);
-    leftPlaceholder.fill({ color: 0x2a2a4e });
-    leftPlaceholder.stroke({ width: 2, color: 0x4a4a6e });
+    leftPlaceholder.fill({ color: COLORS.surfaceSunken });
+    leftPlaceholder.stroke({ width: 1, color: COLORS.border });
     this.placeholderContainer.addChild(leftPlaceholder);
 
     const rightPlaceholder = new Graphics();
     rightPlaceholder.roundRect(scaledWidth + IMAGE_GAP, 0, scaledWidth, scaledHeight, 8);
-    rightPlaceholder.fill({ color: 0x2a2a4e });
-    rightPlaceholder.stroke({ width: 2, color: 0x4a4a6e });
+    rightPlaceholder.fill({ color: COLORS.surfaceSunken });
+    rightPlaceholder.stroke({ width: 1, color: COLORS.border });
     this.placeholderContainer.addChild(rightPlaceholder);
   }
 

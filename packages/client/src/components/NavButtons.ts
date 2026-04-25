@@ -10,10 +10,9 @@ export class NavButtons extends Container {
   constructor() {
     super();
 
-    this.prevButton = this.createButton("<", true);
-    this.nextButton = this.createButton(">", false);
+    this.prevButton = this.createButton("‹", true);
+    this.nextButton = this.createButton("›", false);
 
-    // Position buttons (will be adjusted by parent)
     this.prevButton.position.set(0, 0);
     this.nextButton.position.set(60, 0);
 
@@ -25,16 +24,16 @@ export class NavButtons extends Container {
     const button = new Container();
 
     const bg = new Graphics();
-    bg.roundRect(0, 0, size, size, 8);
+    bg.roundRect(0, 0, size, size, 4);
     bg.fill(COLORS.primary);
 
     const text = new Text({
       text: label,
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 24,
-        fontWeight: "bold",
-        fill: COLORS.text,
+        fontSize: 28,
+        fontWeight: "500",
+        fill: COLORS.primaryOn,
       },
     });
     text.anchor.set(0.5);
@@ -47,13 +46,13 @@ export class NavButtons extends Container {
 
     button.on("pointerover", () => {
       bg.clear();
-      bg.roundRect(0, 0, size, size, 8);
+      bg.roundRect(0, 0, size, size, 4);
       bg.fill(COLORS.primaryHover);
     });
 
     button.on("pointerout", () => {
       bg.clear();
-      bg.roundRect(0, 0, size, size, 8);
+      bg.roundRect(0, 0, size, size, 4);
       bg.fill(COLORS.primary);
     });
 
@@ -74,12 +73,10 @@ export class NavButtons extends Container {
   }
 
   updateState(currentIndex: number, totalImages: number): void {
-    // Disable prev if at first image
-    this.prevButton.alpha = currentIndex > 0 ? 1 : 0.5;
+    this.prevButton.alpha = currentIndex > 0 ? 1 : 0.4;
     this.prevButton.eventMode = currentIndex > 0 ? "static" : "none";
 
-    // Disable next if at last image
-    this.nextButton.alpha = currentIndex < totalImages - 1 ? 1 : 0.5;
+    this.nextButton.alpha = currentIndex < totalImages - 1 ? 1 : 0.4;
     this.nextButton.eventMode = currentIndex < totalImages - 1 ? "static" : "none";
   }
 }

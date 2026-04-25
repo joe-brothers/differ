@@ -37,8 +37,8 @@ export class MatchmakingScene extends Container implements IScene {
       text: "1v1 Match",
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 40,
-        fontWeight: "bold",
+        fontSize: 28,
+        fontWeight: "500",
         fill: COLORS.text,
       },
     });
@@ -63,17 +63,17 @@ export class MatchmakingScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "1v1 Match";
     Object.assign(heading.style, {
-      color: "#ffffff",
+      color: "#202124",
       margin: "0 0 12px 0",
       fontSize: "20px",
+      fontWeight: "500",
       textAlign: "center",
     });
     card.appendChild(heading);
 
     const createBtn = this.overlay.createButton(card, "Create Room");
     const joinBtn = this.overlay.createButton(card, "Join with Code");
-    const backBtn = this.overlay.createButton(card, "Back");
-    backBtn.style.background = "#3a3a5e";
+    const backBtn = this.overlay.createSecondaryButton(card, "Back");
 
     createBtn.addEventListener("click", () => this.createRoom());
     joinBtn.addEventListener("click", () => this.showJoinForm());
@@ -111,24 +111,26 @@ export class MatchmakingScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Waiting for opponent";
     Object.assign(heading.style, {
-      color: "#ffffff",
+      color: "#202124",
       margin: "0 0 8px 0",
       fontSize: "20px",
+      fontWeight: "500",
       textAlign: "center",
     });
     card.appendChild(heading);
 
     const codeEl = document.createElement("div");
     Object.assign(codeEl.style, {
-      color: "#ffffff",
-      fontSize: "40px",
-      fontFamily: "monospace",
-      fontWeight: "bold",
+      color: "#202124",
+      fontSize: "36px",
+      fontFamily: '"Roboto Mono", "JetBrains Mono", ui-monospace, monospace',
+      fontWeight: "500",
       letterSpacing: "4px",
       textAlign: "center",
       padding: "16px",
-      background: "rgba(255,255,255,0.08)",
-      borderRadius: "8px",
+      background: "#F1F3F4",
+      border: "1px solid #DADCE0",
+      borderRadius: "4px",
       margin: "8px 0",
       userSelect: "all",
     });
@@ -138,15 +140,14 @@ export class MatchmakingScene extends Container implements IScene {
     const hint = document.createElement("p");
     hint.textContent = "Share this code with a friend. Game starts automatically.";
     Object.assign(hint.style, {
-      color: "#cccccc",
+      color: "#5F6368",
       fontSize: "13px",
       textAlign: "center",
       margin: "4px 0",
     });
     card.appendChild(hint);
 
-    const cancelBtn = this.overlay!.createButton(card, "Cancel");
-    cancelBtn.style.background = "#3a3a5e";
+    const cancelBtn = this.overlay!.createSecondaryButton(card, "Cancel");
     cancelBtn.addEventListener("click", () => {
       this.cancelled = true;
       game.showMainMenu();
@@ -164,9 +165,10 @@ export class MatchmakingScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Enter Room Code";
     Object.assign(heading.style, {
-      color: "#ffffff",
+      color: "#202124",
       margin: "0 0 8px 0",
       fontSize: "20px",
+      fontWeight: "500",
       textAlign: "center",
     });
     card.appendChild(heading);
@@ -178,13 +180,12 @@ export class MatchmakingScene extends Container implements IScene {
     });
     codeInput.maxLength = 6;
     codeInput.style.letterSpacing = "4px";
-    codeInput.style.fontFamily = "monospace";
+    codeInput.style.fontFamily = '"Roboto Mono", "JetBrains Mono", ui-monospace, monospace';
     codeInput.style.textTransform = "uppercase";
 
     const errText = this.overlay.createErrorText(card);
     const joinBtn = this.overlay.createButton(card, "Join");
-    const backBtn = this.overlay.createButton(card, "Back");
-    backBtn.style.background = "#3a3a5e";
+    const backBtn = this.overlay.createSecondaryButton(card, "Back");
 
     backBtn.addEventListener("click", () => this.showChooser());
 
@@ -220,9 +221,10 @@ export class MatchmakingScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = `Joined ${this.roomCode ?? ""}`;
     Object.assign(heading.style, {
-      color: "#ffffff",
+      color: "#202124",
       margin: "0 0 12px 0",
       fontSize: "20px",
+      fontWeight: "500",
       textAlign: "center",
     });
     card.appendChild(heading);
@@ -230,15 +232,14 @@ export class MatchmakingScene extends Container implements IScene {
     const info = document.createElement("p");
     info.textContent = "Starting soon...";
     Object.assign(info.style, {
-      color: "#cccccc",
+      color: "#5F6368",
       fontSize: "14px",
       textAlign: "center",
       margin: "0 0 12px 0",
     });
     card.appendChild(info);
 
-    const cancelBtn = this.overlay.createButton(card, "Leave");
-    cancelBtn.style.background = "#3a3a5e";
+    const cancelBtn = this.overlay.createSecondaryButton(card, "Leave");
     cancelBtn.addEventListener("click", () => {
       this.cancelled = true;
       game.showMainMenu();
