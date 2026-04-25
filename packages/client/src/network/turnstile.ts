@@ -21,7 +21,7 @@ interface TurnstileApi {
 
 interface TurnstileRenderOpts {
   sitekey: string;
-  size?: "invisible" | "compact" | "normal";
+  appearance?: "always" | "execute" | "interaction-only";
   callback?: (token: string) => void;
   "error-callback"?: (code?: string) => void;
   "expired-callback"?: () => void;
@@ -73,16 +73,26 @@ async function ensureWidget(): Promise<{ api: TurnstileApi; id: string }> {
 
   widgetId = api.render(container, {
     sitekey: TURNSTILE_SITE_KEY,
-    size: "invisible",
+    // Invisible behavior comes from the widget's mode in the Cloudflare
+    // dashboard. `interaction-only` keeps the UI hidden until a managed
+    // challenge actually needs the user — `size: "invisible"` is no longer
+    // a valid value in the current API.
+    appearance: "interaction-only",
     callback: (token) => {
-      pendingResolve?.(token);
+      const r = pendingResolve;
       pendingResolve = null;
       pendingReject = null;
+      // Reset BEFORE resolving so the widget is ready for the next execute()
+      // by the time the awaiting caller chains its next request.
+      if (widgetId) api.reset(widgetId);
+      r?.(token);
     },
     "error-callback": (code) => {
-      pendingReject?.(new Error(`turnstile failed${code ? `: ${code}` : ""}`));
+      const j = pendingReject;
       pendingResolve = null;
       pendingReject = null;
+      if (widgetId) api.reset(widgetId);
+      j?.(new Error(`turnstile failed${code ? `: ${code}` : ""}`));
     },
   });
 
@@ -95,7 +105,8 @@ export async function getTurnstileToken(): Promise<string | undefined> {
   return new Promise<string>((resolve, reject) => {
     pendingResolve = resolve;
     pendingReject = reject;
-    api.reset(id);
+    // No reset() here — the widget is reset inside callback/error-callback
+    // after each token use, so it's already idle when we get here.
     api.execute(id);
   });
 }
