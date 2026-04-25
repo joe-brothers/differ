@@ -16,6 +16,14 @@ export const AuthRes = z.object({
 });
 export type AuthRes = z.infer<typeof AuthRes>;
 
+// /auth/me extends AuthRes with stats the client surfaces in the menu.
+// Kept separate so other endpoints don't have to compute the join.
+export const MeRes = z.object({
+  user: PublicUser,
+  wins: z.number().int().nonnegative(),
+});
+export type MeRes = z.infer<typeof MeRes>;
+
 export const GuestReq = z.object({}).optional();
 
 // Password rules enforced both client-side (form validation) and server-side

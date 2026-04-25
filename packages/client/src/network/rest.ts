@@ -5,7 +5,7 @@ import type {
   LeaderboardRes,
   LoginReq,
   LoginTotpRequiredRes,
-  PublicUser,
+  MeRes,
   TotpSetupRes,
   TotpStatusRes,
   UpgradeReq,
@@ -69,8 +69,8 @@ export const authApi = {
   upgrade(req: UpgradeReq): Promise<AuthRes> {
     return request<AuthRes>("/auth/upgrade", { method: "POST", body: req });
   },
-  me(): Promise<{ user: PublicUser }> {
-    return request<{ user: PublicUser }>("/auth/me");
+  me(): Promise<MeRes> {
+    return request<MeRes>("/auth/me");
   },
   logout(): Promise<{ ok: true }> {
     return request<{ ok: true }>("/auth/logout", { method: "POST" });

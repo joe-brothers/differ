@@ -87,15 +87,6 @@ importers:
       '@tsndr/cloudflare-worker-jwt':
         specifier: ^3.1.4
         version: 3.2.1
-      '@zxcvbn-ts/core':
-        specifier: ^3.0.4
-        version: 3.0.4
-      '@zxcvbn-ts/language-common':
-        specifier: ^3.0.4
-        version: 3.0.4
-      '@zxcvbn-ts/language-en':
-        specifier: ^3.0.2
-        version: 3.0.2
       drizzle-orm:
         specifier: ^0.36.4
         version: 0.36.4(@cloudflare/workers-types@4.20260424.1)(@types/react@19.2.14)(react@19.2.5)

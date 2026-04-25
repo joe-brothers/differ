@@ -92,6 +92,107 @@ export class HtmlOverlay {
     return input;
   }
 
+  // Variant of createInput with a hover/focus-revealed info bubble next to
+  // it. Used to surface password rules without permanently consuming a row
+  // of helper text under the field.
+  createInputWithHint(
+    parent: HTMLElement,
+    options: { type: string; placeholder: string; name: string },
+    hint: { title: string; items: string[] },
+  ): HTMLInputElement {
+    const wrap = document.createElement("div");
+    Object.assign(wrap.style, { position: "relative", width: "100%" });
+    parent.appendChild(wrap);
+
+    const input = this.createInput(wrap, options);
+    // Reserve space for the icon so cursor / placeholder don't overlap it.
+    input.style.paddingRight = "36px";
+
+    const icon = document.createElement("button");
+    icon.type = "button";
+    icon.tabIndex = 0;
+    icon.setAttribute("aria-label", hint.title);
+    icon.textContent = "i";
+    Object.assign(icon.style, {
+      position: "absolute",
+      right: "8px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      width: "20px",
+      height: "20px",
+      borderRadius: "50%",
+      border: `1px solid ${TOKENS.borderStrong}`,
+      background: TOKENS.surface,
+      color: TOKENS.textSecondary,
+      fontFamily: "Georgia, serif",
+      fontStyle: "italic",
+      fontSize: "12px",
+      fontWeight: "600",
+      cursor: "help",
+      padding: "0",
+      lineHeight: "1",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    });
+    wrap.appendChild(icon);
+
+    const tip = document.createElement("div");
+    Object.assign(tip.style, {
+      position: "absolute",
+      right: "0",
+      top: "calc(100% + 6px)",
+      zIndex: "20",
+      minWidth: "260px",
+      maxWidth: "320px",
+      padding: "10px 12px",
+      background: TOKENS.surface,
+      border: `1px solid ${TOKENS.border}`,
+      borderRadius: "6px",
+      boxShadow: "0 2px 6px 2px rgba(60,64,67,.10), 0 1px 2px 0 rgba(60,64,67,.06)",
+      fontFamily: FONT_FAMILY,
+      fontSize: "12px",
+      color: TOKENS.text,
+      display: "none",
+    });
+    const heading = document.createElement("strong");
+    heading.textContent = hint.title;
+    Object.assign(heading.style, { display: "block", marginBottom: "6px", fontWeight: "500" });
+    tip.appendChild(heading);
+    const ul = document.createElement("ul");
+    Object.assign(ul.style, {
+      margin: "0",
+      paddingLeft: "16px",
+      color: TOKENS.textSecondary,
+    });
+    for (const item of hint.items) {
+      const li = document.createElement("li");
+      li.textContent = item;
+      li.style.marginTop = "2px";
+      ul.appendChild(li);
+    }
+    tip.appendChild(ul);
+    wrap.appendChild(tip);
+
+    const show = () => {
+      tip.style.display = "block";
+    };
+    const hide = () => {
+      tip.style.display = "none";
+    };
+    icon.addEventListener("mouseenter", show);
+    icon.addEventListener("mouseleave", hide);
+    icon.addEventListener("focus", show);
+    icon.addEventListener("blur", hide);
+    // Tap (touch / keyboard) toggles for devices without hover.
+    icon.addEventListener("click", (e) => {
+      e.preventDefault();
+      tip.style.display = tip.style.display === "block" ? "none" : "block";
+    });
+
+    return input;
+  }
+
   createButton(
     parent: HTMLElement,
     text: string,
@@ -133,6 +234,16 @@ export class HtmlOverlay {
     });
     parent.appendChild(button);
     return button;
+  }
+
+  // Toggles a button between enabled and disabled with visible affordance.
+  // Inline styles only, so the visual state survives any later style writes
+  // the caller might do (e.g. swapping text to "Loading…").
+  setButtonEnabled(button: HTMLButtonElement, enabled: boolean): void {
+    button.disabled = !enabled;
+    button.style.opacity = enabled ? "1" : "0.5";
+    button.style.cursor = enabled ? "pointer" : "not-allowed";
+    if (!enabled) button.style.boxShadow = "none";
   }
 
   // Outlined / "secondary" button variant — used for Back / Cancel actions.
@@ -249,6 +360,8 @@ export class HtmlOverlay {
     wrap.appendChild(label);
     parent.appendChild(wrap);
 
+    // 0/1 fail (red), 2 passes but is still weak (amber), 3/4 are clearly
+    // good (green). Mirrors the submit gate (passes at ≥ 2).
     const COLORS_BY_SCORE: Record<number, string> = {
       0: TOKENS.error,
       1: TOKENS.error,
@@ -265,6 +378,9 @@ export class HtmlOverlay {
           seg.style.backgroundColor = i < filled ? color : TOKENS.border;
         });
         label.textContent = text;
+        // Mirrors the submit gate (≥ 2 passes). Fail-state labels go red,
+        // passing labels stay neutral so the meter doesn't shout when the
+        // user has already reached an acceptable level.
         label.style.color = score >= 2 ? TOKENS.textSecondary : TOKENS.error;
       },
     };

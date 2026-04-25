@@ -285,7 +285,7 @@ export class LeaderboardScene extends Container implements IScene {
     const row = new Container();
     row.position.set(0, rowY);
 
-    // Rank chip — top 3 get gold-on-amber, others a plain neutral chip.
+    // Rank chip — gold/silver/bronze for the podium, neutral chip otherwise.
     const rankChip = this.buildRankChip(entry.rank);
     rankChip.position.set(HORIZONTAL_PADDING, Math.round(ROW_HEIGHT / 2));
     row.addChild(rankChip);
@@ -330,12 +330,12 @@ export class LeaderboardScene extends Container implements IScene {
 
   private buildRankChip(rank: number): Container {
     const chip = new Container();
-    const isPodium = rank <= 3;
     const size = 24;
+    const palette = podiumPalette(rank);
 
     const bg = new Graphics();
     bg.circle(0, 0, size / 2);
-    bg.fill(isPodium ? COLORS.warningBg : COLORS.surfaceMuted);
+    bg.fill(palette.bg);
     chip.addChild(bg);
 
     const label = new Text({
@@ -344,7 +344,7 @@ export class LeaderboardScene extends Container implements IScene {
         fontFamily: FONT_MONO,
         fontSize: 12,
         fontWeight: "500",
-        fill: isPodium ? COLORS.gold : COLORS.textSecondary,
+        fill: palette.fg,
       },
     });
     label.anchor.set(0.5);
@@ -365,6 +365,13 @@ export class LeaderboardScene extends Container implements IScene {
     this.removeAllListeners();
     super.destroy({ children: true });
   }
+}
+
+function podiumPalette(rank: number): { bg: number; fg: number } {
+  if (rank === 1) return { bg: COLORS.goldBg, fg: COLORS.gold };
+  if (rank === 2) return { bg: COLORS.silverBg, fg: COLORS.silver };
+  if (rank === 3) return { bg: COLORS.bronzeBg, fg: COLORS.bronze };
+  return { bg: COLORS.surfaceMuted, fg: COLORS.textSecondary };
 }
 
 function formatMs(ms: number): string {

@@ -5,7 +5,7 @@ import { HtmlOverlay } from "../ui/HtmlOverlay";
 import { authState } from "../managers/AuthStateManager";
 import { ApiError, authApi } from "../network/rest";
 import { game } from "../core/Game";
-import { evaluatePassword } from "../managers/passwordStrength";
+import { evaluatePassword, PASSWORD_HINT } from "../managers/passwordStrength";
 
 type AuthView = "chooser" | "signin" | "signup" | "totp" | "forgot";
 
@@ -120,11 +120,17 @@ export class AuthScene extends Container implements IScene {
       placeholder: "Username",
       name: "username",
     });
-    const passwordInput = this.overlay.createInput(card, {
-      type: "password",
-      placeholder: "Password",
-      name: "password",
-    });
+    const passwordInput = isSignUp
+      ? this.overlay.createInputWithHint(
+          card,
+          { type: "password", placeholder: "Password", name: "password" },
+          { title: PASSWORD_HINT.title, items: [...PASSWORD_HINT.items] },
+        )
+      : this.overlay.createInput(card, {
+          type: "password",
+          placeholder: "Password",
+          name: "password",
+        });
 
     let strengthMeter: ReturnType<HtmlOverlay["createStrengthMeter"]> | null = null;
     let confirmInput: HTMLInputElement | null = null;
@@ -197,13 +203,41 @@ export class AuthScene extends Container implements IScene {
       }
     };
 
+    // Server-side rules mirrored here so the submit button only becomes
+    // clickable once the form would actually be accepted. zxcvbn output
+    // (the strength meter) is informational, not part of the gate.
+    const isSignupValid = (): boolean => {
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+      if (username.length < 3 || username.length > 32) return false;
+      if (!/^[A-Za-z0-9_]+$/.test(username)) return false;
+      if (password.length < 8 || password.length > 128) return false;
+      if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return false;
+      if (confirmInput && confirmInput.value !== password) return false;
+      return true;
+    };
+
+    const overlay = this.overlay;
+    const refreshSubmit = () => {
+      if (!isSignUp) return;
+      overlay.setButtonEnabled(submitBtn, isSignupValid());
+    };
+
     if (isSignUp) {
+      overlay.setButtonEnabled(submitBtn, false);
       passwordInput.addEventListener("input", () => {
         recomputeStrength();
         recomputeConfirm();
+        refreshSubmit();
       });
-      usernameInput.addEventListener("input", recomputeStrength);
-      confirmInput?.addEventListener("input", recomputeConfirm);
+      usernameInput.addEventListener("input", () => {
+        recomputeStrength();
+        refreshSubmit();
+      });
+      confirmInput?.addEventListener("input", () => {
+        recomputeConfirm();
+        refreshSubmit();
+      });
     }
 
     const submit = async () => {
@@ -213,21 +247,11 @@ export class AuthScene extends Container implements IScene {
         errorText.textContent = "Username and password are required.";
         return;
       }
-      if (isSignUp) {
-        if (confirmInput && confirmInput.value !== password) {
-          errorText.textContent = "Passwords do not match.";
-          return;
-        }
-        const strength = evaluatePassword(password, [username]);
-        if (!strength.passes) {
-          errorText.textContent =
-            strength.warning ||
-            strength.suggestion ||
-            "Password is too weak. Try a longer or less common one.";
-          return;
-        }
+      if (isSignUp && confirmInput && confirmInput.value !== password) {
+        errorText.textContent = "Passwords do not match.";
+        return;
       }
-      submitBtn.disabled = true;
+      overlay.setButtonEnabled(submitBtn, false);
       submitBtn.textContent = "Loading...";
       errorText.textContent = "";
       try {
@@ -254,17 +278,17 @@ export class AuthScene extends Container implements IScene {
             errorText.textContent = "Username is already taken.";
           } else if (err.code === "invalid_credentials") {
             errorText.textContent = "Invalid username or password.";
-          } else if (err.code === "weak_password") {
-            errorText.textContent =
-              err.message || "Password is too weak. Try a longer or less common one.";
           } else {
             errorText.textContent = err.message || "Something went wrong.";
           }
         } else {
           errorText.textContent = "Network error. Please try again.";
         }
-        submitBtn.disabled = false;
         submitBtn.textContent = isSignUp ? "Create" : "Sign In";
+        // Restore enable-state from the validity rule (signup) or just
+        // re-enable (sign-in always allowed to retry).
+        if (isSignUp) refreshSubmit();
+        else submitBtn.disabled = false;
       }
     };
     submitBtn.addEventListener("click", submit);

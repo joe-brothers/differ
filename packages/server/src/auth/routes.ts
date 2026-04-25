@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   LoginReq,
   LoginTotpReq,
@@ -12,14 +12,13 @@ import {
 } from "@differ/shared";
 import type { Env } from "../env.js";
 import { getDb } from "../db/client.js";
-import { users } from "../db/schema.js";
+import { gameResults, users } from "../db/schema.js";
 import { signToken, signTotpTicket, verifyTotpTicket } from "./jwt.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { requireAuth, type AuthEnv } from "./middleware.js";
 import { checkRateLimit, guestKey, loginKey, upgradeKey } from "./rate-limit.js";
 import { setTokenCookie, clearTokenCookie, setDeviceCookie, readDeviceCookie } from "./cookie.js";
 import { verifyTurnstile } from "./turnstile.js";
-import { checkPasswordStrength } from "./password-policy.js";
 import { generateSecret, buildOtpAuthUrl, verifyTotpCode } from "./totp.js";
 
 function clientIp(c: { req: { header: (h: string) => string | undefined } }): string | undefined {
@@ -206,7 +205,17 @@ protectedRoutes.get("/me", async (c) => {
   if (!row) {
     return c.json({ error: { code: "not_found", message: "User gone" } }, 404);
   }
-  return c.json({ user: { userId: row.id, name: row.name, isGuest: row.isGuest === 1 } });
+  // Wins = number of game_results rows for this user. Guest rows are never
+  // inserted (see GameRoom.endGame), so guests always read 0.
+  const winsRow = await db
+    .select({ c: sql<number>`COUNT(*)` })
+    .from(gameResults)
+    .where(eq(gameResults.userId, claims.sub))
+    .get();
+  return c.json({
+    user: { userId: row.id, name: row.name, isGuest: row.isGuest === 1 },
+    wins: winsRow?.c ?? 0,
+  });
 });
 
 protectedRoutes.post("/upgrade", async (c) => {
@@ -233,14 +242,8 @@ protectedRoutes.post("/upgrade", async (c) => {
     );
   }
   const { username, password } = parsed.data;
-
-  const strength = checkPasswordStrength(password, [username, claims.name]);
-  if (!strength.ok) {
-    return c.json(
-      { error: { code: "weak_password", message: strength.reason ?? "Password is too weak" } },
-      400,
-    );
-  }
+  // Strength gate is intentionally just the Zod regex (length + letter +
+  // digit). zxcvbn runs only on the client as a visual nudge.
 
   const db = getDb(c.env.DB);
 

@@ -11,7 +11,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Env } from "../env.js";
 import { verifyToken } from "../auth/jwt.js";
 import { getDb } from "../db/client.js";
-import { gameResults } from "../db/schema.js";
+import { gameResults, users } from "../db/schema.js";
 import { buildRound, findHit, type RoundPuzzle } from "../puzzles/service.js";
 
 type RoomStatus = "waiting" | "in_progress" | "ended";
@@ -490,7 +490,19 @@ export class GameRoom implements DurableObject {
         }
       }
       if (rows.length > 0) {
-        await getDb(this.env.DB).insert(gameResults).values(rows).run();
+        // Skip guest accounts: leaderboard is for registered players only,
+        // otherwise throwaway guest names spam the rankings.
+        const db = getDb(this.env.DB);
+        const candidateIds = rows.map((r) => r.userId);
+        const allowed = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(and(inArray(users.id, candidateIds), eq(users.isGuest, 0)));
+        const allowedSet = new Set(allowed.map((u) => u.id));
+        const persistRows = rows.filter((r) => allowedSet.has(r.userId));
+        if (persistRows.length > 0) {
+          await db.insert(gameResults).values(persistRows).run();
+        }
       }
     }
 

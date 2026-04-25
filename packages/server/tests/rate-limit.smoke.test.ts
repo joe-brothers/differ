@@ -31,6 +31,11 @@ async function postJson(
   });
 }
 
+// Sequential awaits in these loops are intentional: rate-limit windows are
+// stateful and the assertion is on the request-ordinal at which a 429 first
+// appears. Parallel `Promise.all` would race and break the assertion.
+/* eslint-disable no-await-in-loop */
+
 test("guest endpoint enforces per-IP limit (20/60s)", async () => {
   const ip = freshIp("guest");
   const headers = { "cf-connecting-ip": ip };

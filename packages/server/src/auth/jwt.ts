@@ -1,4 +1,4 @@
-import jwt from "@tsndr/cloudflare-worker-jwt";
+import { sign, verify, decode } from "@tsndr/cloudflare-worker-jwt";
 import type { JwtClaims } from "../env.js";
 
 const TOKEN_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
@@ -17,14 +17,14 @@ export async function signToken(
     exp: now + TOKEN_TTL_SEC,
     iss: issuer,
   };
-  return jwt.sign(claims, secret);
+  return sign(claims, secret);
 }
 
 export async function verifyToken(secret: string, token: string): Promise<JwtClaims | null> {
   try {
-    const ok = await jwt.verify(token, secret);
+    const ok = await verify(token, secret);
     if (!ok) return null;
-    const decoded = jwt.decode<JwtClaims>(token);
+    const decoded = decode<JwtClaims>(token);
     return decoded.payload ?? null;
   } catch {
     return null;
@@ -56,14 +56,14 @@ export async function signTotpTicket(
     exp: now + TOTP_TICKET_TTL_SEC,
     iss: issuer,
   };
-  return jwt.sign(claims, secret);
+  return sign(claims, secret);
 }
 
 export async function verifyTotpTicket(secret: string, token: string): Promise<string | null> {
   try {
-    const ok = await jwt.verify(token, secret);
+    const ok = await verify(token, secret);
     if (!ok) return null;
-    const decoded = jwt.decode<TotpTicketClaims>(token);
+    const decoded = decode<TotpTicketClaims>(token);
     const claims = decoded.payload;
     if (!claims || claims.purpose !== "totp_pending") return null;
     return claims.sub;

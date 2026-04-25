@@ -6,7 +6,7 @@ import { game } from "../core/Game";
 import { authState } from "../managers/AuthStateManager";
 import { HtmlOverlay } from "../ui/HtmlOverlay";
 import { ApiError, authApi } from "../network/rest";
-import { evaluatePassword } from "../managers/passwordStrength";
+import { evaluatePassword, PASSWORD_HINT } from "../managers/passwordStrength";
 
 export class MainMenuScene extends Container implements IScene {
   private app: Application;
@@ -15,6 +15,7 @@ export class MainMenuScene extends Container implements IScene {
   private matchButton: Container | null = null;
   private leaderboardButton: Container | null = null;
   private usernameText: Text | null = null;
+  private winsText: Text | null = null;
   private logoutText: Text | null = null;
   private upgradeText: Text | null = null;
   private settingsText: Text | null = null;
@@ -32,6 +33,9 @@ export class MainMenuScene extends Container implements IScene {
     this.createMatchButton();
     this.createLeaderboardButton();
     this.createUserInfo();
+    // Pull fresh stats (wins) so the counter reflects games played in the
+    // last session — fire-and-forget so the menu still draws instantly.
+    void authState.refresh().then(() => this.refreshUserInfo());
   }
 
   private createTitle(): void {
@@ -182,6 +186,19 @@ export class MainMenuScene extends Container implements IScene {
     this.addChild(this.leaderboardButton);
   }
 
+  private formatWins(n: number): string {
+    return n === 1 ? "1 win" : `${n} wins`;
+  }
+
+  // Updates just the wins line in place so a refetch doesn't repaint the
+  // whole corner (which would also reset hover state on the surrounding
+  // links).
+  private refreshUserInfo(): void {
+    if (this.winsText) {
+      this.winsText.text = this.formatWins(authState.getWins());
+    }
+  }
+
   private createUserInfo(): void {
     const user = authState.getUser();
     if (!user) return;
@@ -199,6 +216,24 @@ export class MainMenuScene extends Container implements IScene {
     this.addChild(this.usernameText);
 
     let nextY = 46;
+
+    // Wins: shown for everyone (guests just always read 0 since their
+    // results don't get persisted to the leaderboard). Suppress the line
+    // for guests so the corner stays uncluttered.
+    if (!user.isGuest) {
+      this.winsText = new Text({
+        text: this.formatWins(authState.getWins()),
+        style: {
+          fontFamily: "Arial, sans-serif",
+          fontSize: 14,
+          fill: COLORS.textSecondary,
+        },
+      });
+      this.winsText.anchor.set(1, 0);
+      this.winsText.position.set(this.app.screen.width - 20, nextY);
+      this.addChild(this.winsText);
+      nextY += 22;
+    }
 
     // Guests get a "Save Account" link that lets them claim a permanent
     // username/password without losing their session or stats.
@@ -307,11 +342,11 @@ export class MainMenuScene extends Container implements IScene {
       placeholder: "Username",
       name: "username",
     });
-    const passwordInput = this.upgradeOverlay.createInput(card, {
-      type: "password",
-      placeholder: "Password",
-      name: "password",
-    });
+    const passwordInput = this.upgradeOverlay.createInputWithHint(
+      card,
+      { type: "password", placeholder: "Password", name: "password" },
+      { title: PASSWORD_HINT.title, items: [...PASSWORD_HINT.items] },
+    );
     const meter = this.upgradeOverlay.createStrengthMeter(card);
     const confirmInput = this.upgradeOverlay.createInput(card, {
       type: "password",
@@ -344,12 +379,37 @@ export class MainMenuScene extends Container implements IScene {
         matchHelper.textContent = "";
       }
     };
+
+    // Mirror the server-side rules so the Save button only lights up once
+    // the form would actually be accepted (matches AuthScene signup).
+    // zxcvbn output is shown via the meter as a nudge, not as a gate.
+    const overlay = this.upgradeOverlay;
+    const isFormValid = (): boolean => {
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+      if (username.length < 3 || username.length > 32) return false;
+      if (!/^[A-Za-z0-9_]+$/.test(username)) return false;
+      if (password.length < 8 || password.length > 128) return false;
+      if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return false;
+      if (confirmInput.value !== password) return false;
+      return true;
+    };
+    const refreshSubmit = () => overlay.setButtonEnabled(submitBtn, isFormValid());
+    overlay.setButtonEnabled(submitBtn, false);
+
     passwordInput.addEventListener("input", () => {
       refreshStrength();
       refreshMatch();
+      refreshSubmit();
     });
-    usernameInput.addEventListener("input", refreshStrength);
-    confirmInput.addEventListener("input", refreshMatch);
+    usernameInput.addEventListener("input", () => {
+      refreshStrength();
+      refreshSubmit();
+    });
+    confirmInput.addEventListener("input", () => {
+      refreshMatch();
+      refreshSubmit();
+    });
 
     cancelBtn.addEventListener("click", () => {
       this.upgradeOverlay?.destroy();
@@ -367,15 +427,7 @@ export class MainMenuScene extends Container implements IScene {
         errorText.textContent = "Passwords do not match.";
         return;
       }
-      const strength = evaluatePassword(password, [username]);
-      if (!strength.passes) {
-        errorText.textContent =
-          strength.warning ||
-          strength.suggestion ||
-          "Password is too weak. Try a longer or less common one.";
-        return;
-      }
-      submitBtn.disabled = true;
+      overlay.setButtonEnabled(submitBtn, false);
       submitBtn.textContent = "Saving...";
       errorText.textContent = "";
       try {
@@ -389,17 +441,14 @@ export class MainMenuScene extends Container implements IScene {
         if (err instanceof ApiError) {
           if (err.code === "username_taken") {
             errorText.textContent = "Username is already taken.";
-          } else if (err.code === "weak_password") {
-            errorText.textContent =
-              err.message || "Password is too weak. Try a longer or less common one.";
           } else {
             errorText.textContent = err.message || "Something went wrong.";
           }
         } else {
           errorText.textContent = "Network error. Try again.";
         }
-        submitBtn.disabled = false;
         submitBtn.textContent = "Save";
+        refreshSubmit();
       }
     };
     submitBtn.addEventListener("click", submit);
@@ -710,6 +759,10 @@ export class MainMenuScene extends Container implements IScene {
       this.usernameText.position.set(width - 20, 20);
     }
     let y = 46;
+    if (this.winsText) {
+      this.winsText.position.set(width - 20, y);
+      y += 22;
+    }
     if (this.upgradeText) {
       this.upgradeText.position.set(width - 20, y);
       y += 26;

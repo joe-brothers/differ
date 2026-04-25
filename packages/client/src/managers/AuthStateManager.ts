@@ -6,9 +6,14 @@ import { authApi } from "../network/rest";
 // only tracks the public user object so the UI knows who is signed in.
 export class AuthStateManager extends EventEmitter {
   private user: PublicUser | null = null;
+  private wins = 0;
 
   getUser(): PublicUser | null {
     return this.user;
+  }
+
+  getWins(): number {
+    return this.wins;
   }
 
   isAuthenticated(): boolean {
@@ -18,12 +23,27 @@ export class AuthStateManager extends EventEmitter {
   // Called on app start. Asks the server who we are based on the cookie.
   async tryRestore(): Promise<boolean> {
     try {
-      const { user } = await authApi.me();
+      const { user, wins } = await authApi.me();
       this.user = user;
+      this.wins = wins;
       this.emit("authStateChanged");
       return true;
     } catch {
       return false;
+    }
+  }
+
+  // Re-fetches /auth/me. Used when returning to the menu after a game so
+  // the wins counter reflects the latest result without a full reload.
+  async refresh(): Promise<void> {
+    if (!this.user) return;
+    try {
+      const { user, wins } = await authApi.me();
+      this.user = user;
+      this.wins = wins;
+      this.emit("authStateChanged");
+    } catch {
+      // Network blip — keep cached values rather than logging out.
     }
   }
 
@@ -68,6 +88,7 @@ export class AuthStateManager extends EventEmitter {
       // Even if the network call fails, drop local state so the UI updates.
     }
     this.user = null;
+    this.wins = 0;
     this.emit("authStateChanged");
   }
 }

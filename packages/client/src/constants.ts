@@ -56,8 +56,14 @@ export const COLORS = {
   // Modal scrim — neutral charcoal, not pure black.
   overlay: 0x202124,
 
-  // Highlight (rank gold)
+  // Podium medals — leaderboard top 3.
+  // `*Bg` is the chip surface, the bare token is the foreground (number text).
   gold: 0xf9ab00,
+  goldBg: 0xfef7e0,
+  silver: 0x8a8d91,
+  silverBg: 0xeceef1,
+  bronze: 0xa0561a,
+  bronzeBg: 0xf8e4d0,
 };
 
 // Layout
