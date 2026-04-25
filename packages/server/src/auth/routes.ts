@@ -7,6 +7,7 @@ import { users } from "../db/schema.js";
 import { signToken } from "./jwt.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { requireAuth, type AuthEnv } from "./middleware.js";
+import { checkRateLimit, guestKey, loginKey, upgradeKey } from "./rate-limit.js";
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
 
@@ -20,6 +21,8 @@ function genUserId(): string {
 }
 
 authRoutes.post("/guest", async (c) => {
+  const limited = await checkRateLimit(c.env.RL_GUEST, guestKey(c));
+  if (limited) return limited;
   const userId = genUserId();
   const name = randomGuestName();
   const db = getDb(c.env.DB);
@@ -40,6 +43,10 @@ authRoutes.post("/login", async (c) => {
     return c.json({ error: { code: "bad_request", message: "Invalid body" } }, 400);
   }
   const { username, password } = parsed.data;
+  // Key by IP+username so a single attacker can't grind one account, but
+  // legitimate users on shared NAT aren't blocked by neighbors' typos.
+  const limited = await checkRateLimit(c.env.RL_LOGIN, loginKey(c, username));
+  if (limited) return limited;
   const db = getDb(c.env.DB);
   const row = await db
     .select({
@@ -92,6 +99,8 @@ protectedRoutes.post("/upgrade", async (c) => {
       409,
     );
   }
+  const limited = await checkRateLimit(c.env.RL_UPGRADE, upgradeKey(c, claims.sub));
+  if (limited) return limited;
   const raw = await c.req.json().catch(() => ({}));
   const parsed = UpgradeReq.safeParse(raw);
   if (!parsed.success) {
