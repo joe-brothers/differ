@@ -7,7 +7,16 @@
     <link rel="stylesheet" href="/style.css" />
     <title>Differ</title>
     <link rel="preconnect" href="https://challenges.cloudflare.com" />
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script>
+      window.onloadTurnstileCallback = function () {
+        window.__turnstileReady = true;
+      };
+    </script>
+    <script
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback&render=explicit"
+      async
+      defer
+    ></script>
   </head>
 
   <body>

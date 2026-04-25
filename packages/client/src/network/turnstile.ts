@@ -5,11 +5,15 @@
 // reset before requesting a new one. Returns `undefined` when no site key is
 // configured — in that case the server is expected to also have an empty
 // TURNSTILE_SECRET, leaving verification as a no-op.
+//
+// Lifecycle: index.html loads api.js with `?onload=onloadTurnstileCallback&
+// render=explicit`. The inline pre-script defines the callback which sets
+// `window.__turnstileReady = true`. We poll that flag rather than calling
+// `turnstile.ready()` (which logs a misleading warning on first invocation).
 
 import { TURNSTILE_SITE_KEY } from "../constants";
 
 interface TurnstileApi {
-  ready: (cb: () => void) => void;
   render: (el: HTMLElement | string, opts: TurnstileRenderOpts) => string;
   execute: (widgetId: string) => void;
   reset: (widgetId: string) => void;
@@ -26,6 +30,7 @@ interface TurnstileRenderOpts {
 declare global {
   interface Window {
     turnstile?: TurnstileApi;
+    __turnstileReady?: boolean;
   }
 }
 
@@ -37,7 +42,7 @@ function waitForApi(): Promise<TurnstileApi> {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     const tick = (): void => {
-      if (window.turnstile) {
+      if (window.__turnstileReady && window.turnstile) {
         resolve(window.turnstile);
         return;
       }
@@ -65,8 +70,6 @@ async function ensureWidget(): Promise<{ api: TurnstileApi; id: string }> {
   container.style.height = "0";
   container.style.overflow = "hidden";
   document.body.appendChild(container);
-
-  await new Promise<void>((resolve) => api.ready(resolve));
 
   widgetId = api.render(container, {
     sitekey: TURNSTILE_SITE_KEY,
