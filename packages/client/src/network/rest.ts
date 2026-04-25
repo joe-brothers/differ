@@ -54,11 +54,14 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
 export type LoginResponse = AuthRes | LoginTotpRequiredRes;
 
 export const authApi = {
-  guest(): Promise<AuthRes> {
-    return request<AuthRes>("/auth/guest", { method: "POST" });
+  guest(turnstileToken?: string): Promise<AuthRes> {
+    return request<AuthRes>("/auth/guest", { method: "POST", body: { turnstileToken } });
   },
-  login(req: LoginReq): Promise<LoginResponse> {
-    return request<LoginResponse>("/auth/login", { method: "POST", body: req });
+  login(req: LoginReq, turnstileToken?: string): Promise<LoginResponse> {
+    return request<LoginResponse>("/auth/login", {
+      method: "POST",
+      body: { ...req, turnstileToken },
+    });
   },
   loginTotp(ticket: string, code: string): Promise<AuthRes> {
     return request<AuthRes>("/auth/login/totp", {
@@ -66,8 +69,11 @@ export const authApi = {
       body: { ticket, code },
     });
   },
-  upgrade(req: UpgradeReq): Promise<AuthRes> {
-    return request<AuthRes>("/auth/upgrade", { method: "POST", body: req });
+  upgrade(req: UpgradeReq, turnstileToken?: string): Promise<AuthRes> {
+    return request<AuthRes>("/auth/upgrade", {
+      method: "POST",
+      body: { ...req, turnstileToken },
+    });
   },
   me(): Promise<MeRes> {
     return request<MeRes>("/auth/me");

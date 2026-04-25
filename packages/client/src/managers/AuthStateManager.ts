@@ -1,6 +1,7 @@
 import { EventEmitter } from "pixi.js";
 import type { PublicUser } from "@differ/shared";
 import { authApi } from "../network/rest";
+import { getTurnstileToken } from "../network/turnstile";
 
 // Auth tokens live in an httpOnly cookie set by the server. The client
 // only tracks the public user object so the UI knows who is signed in.
@@ -48,7 +49,8 @@ export class AuthStateManager extends EventEmitter {
   }
 
   async createGuest(): Promise<void> {
-    const res = await authApi.guest();
+    const turnstileToken = await getTurnstileToken();
+    const res = await authApi.guest(turnstileToken);
     this.user = res.user;
     this.emit("authStateChanged");
   }
@@ -60,7 +62,8 @@ export class AuthStateManager extends EventEmitter {
     username: string,
     password: string,
   ): Promise<{ kind: "ok"; user: PublicUser } | { kind: "totp"; ticket: string }> {
-    const res = await authApi.login({ username, password });
+    const turnstileToken = await getTurnstileToken();
+    const res = await authApi.login({ username, password }, turnstileToken);
     if ("totpRequired" in res) {
       return { kind: "totp", ticket: res.ticket };
     }
@@ -76,7 +79,8 @@ export class AuthStateManager extends EventEmitter {
   }
 
   async upgrade(username: string, password: string): Promise<void> {
-    const res = await authApi.upgrade({ username, password });
+    const turnstileToken = await getTurnstileToken();
+    const res = await authApi.upgrade({ username, password }, turnstileToken);
     this.user = res.user;
     this.emit("authStateChanged");
   }

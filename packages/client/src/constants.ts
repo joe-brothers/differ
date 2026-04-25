@@ -3,6 +3,11 @@
 // registrable domain. Override via VITE_API_BASE_URL only for cross-origin.
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
+// Cloudflare Turnstile site key (public). Empty disables client-side widget;
+// pair with empty TURNSTILE_SECRET on the server to keep verification a no-op.
+export const TURNSTILE_SITE_KEY =
+  (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined) ?? "";
+
 // CDN and image configuration
 export const CDN_BASE = "https://differ-assets.joe-brothers.com";
 export const IMAGE_WIDTH = 300;
