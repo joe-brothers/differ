@@ -14,6 +14,7 @@ export class MatchmakingScene extends Container implements IScene {
   private roomCode: string | null = null;
   private cancelled = false;
   private opponentEl: HTMLDivElement | null = null;
+  private waitingSpinner: HTMLDivElement | null = null;
 
   constructor(app: Application) {
     super();
@@ -54,6 +55,7 @@ export class MatchmakingScene extends Container implements IScene {
     this.statusText?.destroy();
     this.statusText = null;
     this.opponentEl = null;
+    this.waitingSpinner = null;
   }
 
   private showChooser(): void {
@@ -121,6 +123,15 @@ export class MatchmakingScene extends Container implements IScene {
     });
     card.appendChild(heading);
 
+    // GitHub-style: code text in a relatively-positioned box, copy button
+    // pinned to the top-right corner. Stays out of the way until hovered.
+    const codeWrap = document.createElement("div");
+    Object.assign(codeWrap.style, {
+      position: "relative",
+      margin: "8px 0",
+    });
+    card.appendChild(codeWrap);
+
     const codeEl = document.createElement("div");
     Object.assign(codeEl.style, {
       color: "#202124",
@@ -129,15 +140,17 @@ export class MatchmakingScene extends Container implements IScene {
       fontWeight: "500",
       letterSpacing: "4px",
       textAlign: "center",
-      padding: "16px",
+      padding: "16px 48px",
       background: "#F1F3F4",
       border: "1px solid #DADCE0",
       borderRadius: "4px",
-      margin: "8px 0",
       userSelect: "all",
     });
     codeEl.textContent = code ?? "...";
-    card.appendChild(codeEl);
+    codeWrap.appendChild(codeEl);
+
+    const copyBtn = this.makeCopyButton(() => codeEl.textContent ?? "");
+    codeWrap.appendChild(copyBtn);
 
     const hint = document.createElement("p");
     hint.textContent = "Share this code with a friend. Game starts automatically.";
@@ -160,6 +173,10 @@ export class MatchmakingScene extends Container implements IScene {
     });
     card.appendChild(this.opponentEl);
 
+    // Spinner: visible while we wait for the opponent. Hidden once they join
+    // (renderOpponent removes it).
+    this.waitingSpinner = this.overlay!.createSpinner(card, 20);
+
     const cancelBtn = this.overlay!.createSecondaryButton(card, "Cancel");
     cancelBtn.addEventListener("click", () => {
       this.cancelled = true;
@@ -167,6 +184,70 @@ export class MatchmakingScene extends Container implements IScene {
     });
 
     return { codeEl, hint };
+  }
+
+  // GitHub-style copy button. Pinned top-right of a relatively-positioned
+  // parent. Resolves the text lazily so it works for the create-room flow
+  // where the code arrives after the button is mounted.
+  private makeCopyButton(getText: () => string): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.setAttribute("aria-label", "Copy room code");
+    Object.assign(btn.style, {
+      position: "absolute",
+      top: "8px",
+      right: "8px",
+      padding: "4px 10px",
+      height: "28px",
+      borderRadius: "4px",
+      border: "1px solid #DADCE0",
+      background: "#FFFFFF",
+      color: "#5F6368",
+      fontSize: "12px",
+      fontWeight: "500",
+      cursor: "pointer",
+      transition: "background 80ms ease-out, color 80ms ease-out",
+    });
+    btn.textContent = "Copy";
+    btn.addEventListener("mouseenter", () => {
+      btn.style.background = "#F1F3F4";
+      btn.style.color = "#202124";
+    });
+    btn.addEventListener("mouseleave", () => {
+      btn.style.background = "#FFFFFF";
+      btn.style.color = "#5F6368";
+    });
+    btn.addEventListener("click", async () => {
+      const text = getText();
+      if (!text || text === "...") return;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // Fallback: select+execCommand if clipboard API blocked (older Safari,
+        // permission denied). We don't fail loudly — copy button is a UX
+        // niceness, the user can still read the code.
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand("copy");
+        } catch {
+          /* give up */
+        }
+        ta.remove();
+      }
+      const original = btn.textContent;
+      btn.textContent = "Copied!";
+      btn.style.color = "#1A73E8";
+      window.setTimeout(() => {
+        btn.textContent = original;
+        btn.style.color = "#5F6368";
+      }, 1200);
+    });
+    return btn;
   }
 
   // Populate the opponent line under the room code (or "Joined" header).
@@ -180,6 +261,10 @@ export class MatchmakingScene extends Container implements IScene {
     Object.assign(winsBadge.style, { color: "#5F6368" });
     this.opponentEl.appendChild(label);
     this.opponentEl.appendChild(winsBadge);
+    // Once we have an opponent the wait is over; drop the spinner so the
+    // card doesn't keep implying "still searching".
+    this.waitingSpinner?.remove();
+    this.waitingSpinner = null;
   }
 
   private showJoinForm(): void {
@@ -245,15 +330,38 @@ export class MatchmakingScene extends Container implements IScene {
     const card = this.overlay.createFormContainer();
 
     const heading = document.createElement("h2");
-    heading.textContent = `Joined ${this.roomCode ?? ""}`;
+    heading.textContent = "Joined";
     Object.assign(heading.style, {
       color: "#202124",
-      margin: "0 0 12px 0",
+      margin: "0 0 8px 0",
       fontSize: "20px",
       fontWeight: "500",
       textAlign: "center",
     });
     card.appendChild(heading);
+
+    if (this.roomCode) {
+      const codeWrap = document.createElement("div");
+      Object.assign(codeWrap.style, { position: "relative", margin: "0 0 8px 0" });
+      const codeEl = document.createElement("div");
+      Object.assign(codeEl.style, {
+        color: "#202124",
+        fontSize: "20px",
+        fontFamily: '"Roboto Mono", "JetBrains Mono", ui-monospace, monospace',
+        fontWeight: "500",
+        letterSpacing: "4px",
+        textAlign: "center",
+        padding: "10px 48px",
+        background: "#F1F3F4",
+        border: "1px solid #DADCE0",
+        borderRadius: "4px",
+        userSelect: "all",
+      });
+      codeEl.textContent = this.roomCode;
+      codeWrap.appendChild(codeEl);
+      codeWrap.appendChild(this.makeCopyButton(() => codeEl.textContent ?? ""));
+      card.appendChild(codeWrap);
+    }
 
     const info = document.createElement("p");
     info.textContent = "Starting soon...";
@@ -274,6 +382,8 @@ export class MatchmakingScene extends Container implements IScene {
       minHeight: "20px",
     });
     card.appendChild(this.opponentEl);
+
+    this.waitingSpinner = this.overlay.createSpinner(card, 20);
 
     const cancelBtn = this.overlay.createSecondaryButton(card, "Leave");
     cancelBtn.addEventListener("click", () => {

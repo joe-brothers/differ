@@ -145,6 +145,40 @@ export class HtmlOverlay {
     return button;
   }
 
+  // A small inline progress spinner. Used in waiting/loading cards so users
+  // can tell the UI is alive even when nothing else changes.
+  createSpinner(parent: HTMLElement, size: number = 20): HTMLDivElement {
+    HtmlOverlay.ensureSpinnerKeyframes();
+    const wrapper = document.createElement("div");
+    Object.assign(wrapper.style, {
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: "4px",
+    });
+    const spinner = document.createElement("div");
+    Object.assign(spinner.style, {
+      width: `${size}px`,
+      height: `${size}px`,
+      border: `2px solid ${TOKENS.border}`,
+      borderTopColor: TOKENS.primary,
+      borderRadius: "50%",
+      animation: "differSpin 0.8s linear infinite",
+    });
+    wrapper.appendChild(spinner);
+    parent.appendChild(wrapper);
+    return wrapper;
+  }
+
+  private static spinnerKeyframesInjected = false;
+  private static ensureSpinnerKeyframes(): void {
+    if (HtmlOverlay.spinnerKeyframesInjected) return;
+    const style = document.createElement("style");
+    style.textContent = `@keyframes differSpin { to { transform: rotate(360deg); } }`;
+    document.head.appendChild(style);
+    HtmlOverlay.spinnerKeyframesInjected = true;
+  }
+
   createErrorText(parent: HTMLElement): HTMLParagraphElement {
     const p = document.createElement("p");
     Object.assign(p.style, {

@@ -68,6 +68,7 @@ export class GameScene extends Container implements IScene {
   private offPlayerLeft?: () => void;
   private offPlayerOffline?: () => void;
   private offPlayerOnline?: () => void;
+  private offPlayerReady?: () => void;
 
   constructor(app: Application) {
     super();
@@ -279,16 +280,36 @@ export class GameScene extends Container implements IScene {
       }
 
       const mine = msg.results.find((r) => r.userId === myId);
+      const opp = msg.results.find((r) => r.userId !== myId);
       const myElapsedSec = mine?.elapsedMs != null ? mine.elapsedMs / 1000 : 0;
+      const winnerElapsedSec =
+        msg.results.find((r) => r.userId === msg.winnerId)?.elapsedMs ?? null;
       this.timerFrozenAtSec = myElapsedSec;
 
       const ui = useUIStore.getState();
       if (state.gameType === "one_on_one") {
         const isWin = msg.winnerId === myId;
-        ui.showComplete1v1(isWin ? "win" : "lose", myElapsedSec);
+        // Winner pays attention to time, loser to progress; pass both so the
+        // modal can pick. Fallback opponent name covers the timeout-no-result
+        // case where the room had no one but us.
+        const elapsedForModal = isWin
+          ? myElapsedSec
+          : winnerElapsedSec != null
+            ? winnerElapsedSec / 1000
+            : 0;
+        const myFound = mine?.foundCount ?? state.foundCount;
+        const opponentName = opp?.name ?? state.opponentUsername ?? "Opponent";
+        ui.showComplete1v1(isWin ? "win" : "lose", elapsedForModal, myFound, opponentName);
       } else {
         ui.showCompleteSingle(myElapsedSec);
       }
+    };
+
+    // Post-game rematch signal from the other player.
+    const onPlayerReady = (msg: { userId: string }) => {
+      if (!this.gameEnded) return;
+      if (msg.userId === myId) return;
+      useUIStore.getState().markOpponentRematch();
     };
 
     const onLeft = (msg: { userId: string }) => {
@@ -314,11 +335,13 @@ export class GameScene extends Container implements IScene {
     socket.on("player_left", onLeft);
     socket.on("player_offline", onOffline);
     socket.on("player_online", onOnline);
+    socket.on("player_ready", onPlayerReady);
     this.offClickResult = () => socket.off("click_result", onClick);
     this.offGameEnd = () => socket.off("game_end", onEnd);
     this.offPlayerLeft = () => socket.off("player_left", onLeft);
     this.offPlayerOffline = () => socket.off("player_offline", onOffline);
     this.offPlayerOnline = () => socket.off("player_online", onOnline);
+    this.offPlayerReady = () => socket.off("player_ready", onPlayerReady);
   }
 
   private setOpponentOnline(online: boolean): void {
@@ -522,6 +545,7 @@ export class GameScene extends Container implements IScene {
     this.offPlayerLeft?.();
     this.offPlayerOffline?.();
     this.offPlayerOnline?.();
+    this.offPlayerReady?.();
     for (const off of this.offStateListeners) off();
     this.offStateListeners = [];
 

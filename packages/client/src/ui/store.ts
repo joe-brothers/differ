@@ -9,7 +9,15 @@ export type OverlayModal =
   | { type: "none" }
   | { type: "pause" }
   | { type: "complete-single"; elapsedSec: number; rank?: number }
-  | { type: "complete-1v1"; result: "win" | "lose"; elapsedSec: number };
+  | {
+      type: "complete-1v1";
+      result: "win" | "lose";
+      // Winner's clock (filled even for the loser, so we can decide whether
+      // to show it). Loser sees a foundCount progress line instead.
+      elapsedSec: number;
+      foundCount: number;
+      opponentName: string;
+    };
 
 interface UIStore {
   // HUD — visible only while GameScene is mounted.
@@ -26,6 +34,10 @@ interface UIStore {
   // Overlay modal state
   modal: OverlayModal;
   rematchPending: boolean;
+  // Set when the OPPONENT has signaled rematch (we received their player_ready
+  // post-game). Independent of `rematchPending` which tracks the local user's
+  // own click. Reset on modal close / new game.
+  opponentRematch: boolean;
 
   // Callbacks wired up by the current scene on mount; cleared on unmount.
   // React buttons fire these instead of holding scene references themselves.
@@ -52,8 +64,14 @@ interface UIStore {
   openPause: () => void;
   closePause: () => void;
   showCompleteSingle: (elapsedSec: number, rank?: number) => void;
-  showComplete1v1: (result: "win" | "lose", elapsedSec: number) => void;
+  showComplete1v1: (
+    result: "win" | "lose",
+    elapsedSec: number,
+    foundCount: number,
+    opponentName: string,
+  ) => void;
   markRematchPending: () => void;
+  markOpponentRematch: () => void;
 
   setCallbacks: (cb: Partial<UIStore["callbacks"]>) => void;
   resetCallbacks: () => void;
@@ -71,6 +89,7 @@ export const useUIStore = create<UIStore>((set) => ({
   timerSec: 0,
   modal: { type: "none" },
   rematchPending: false,
+  opponentRematch: false,
   callbacks: {},
 
   mountHud: () => {
@@ -87,6 +106,7 @@ export const useUIStore = create<UIStore>((set) => ({
       timerSec: 0,
       modal: { type: "none" },
       rematchPending: false,
+      opponentRematch: false,
     });
   },
 
@@ -95,6 +115,7 @@ export const useUIStore = create<UIStore>((set) => ({
       hudVisible: false,
       modal: { type: "none" },
       rematchPending: false,
+      opponentRematch: false,
       callbacks: {},
     });
   },
@@ -106,10 +127,19 @@ export const useUIStore = create<UIStore>((set) => ({
   closePause: () => set((s) => (s.modal.type === "pause" ? { modal: { type: "none" } } : {})),
 
   showCompleteSingle: (elapsedSec, rank) =>
-    set({ modal: { type: "complete-single", elapsedSec, rank }, rematchPending: false }),
-  showComplete1v1: (result, elapsedSec) =>
-    set({ modal: { type: "complete-1v1", result, elapsedSec }, rematchPending: false }),
+    set({
+      modal: { type: "complete-single", elapsedSec, rank },
+      rematchPending: false,
+      opponentRematch: false,
+    }),
+  showComplete1v1: (result, elapsedSec, foundCount, opponentName) =>
+    set({
+      modal: { type: "complete-1v1", result, elapsedSec, foundCount, opponentName },
+      rematchPending: false,
+      opponentRematch: false,
+    }),
   markRematchPending: () => set({ rematchPending: true }),
+  markOpponentRematch: () => set({ opponentRematch: true }),
 
   setCallbacks: (cb) => set((s) => ({ callbacks: { ...s.callbacks, ...cb } })),
   resetCallbacks: () => set({ callbacks: {} }),
