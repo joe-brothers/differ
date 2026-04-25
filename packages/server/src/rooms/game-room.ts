@@ -13,6 +13,7 @@ import { gameResults } from "../db/schema.js";
 import { buildRound, findHit, type RoundPuzzle } from "../puzzles/service.js";
 
 type RoomStatus = "waiting" | "in_progress" | "ended";
+type EndReason = "winner" | "timeout";
 
 interface StoredPlayer {
   userId: string;
@@ -32,6 +33,7 @@ interface StoredRoom {
   createdAt: number;
   winnerId: string | null;
   gamesPlayed: number; // 0 = first game (auto-start); >0 = rematch (both must ready)
+  lastActivityAt: number; // baseline for idle cleanup
 }
 
 interface SocketAttachment {
@@ -124,7 +126,10 @@ export class GameRoom implements DurableObject {
         await this.handleClick(attachment.userId, msg.puzzleIdx, msg.x, msg.y);
         break;
       case "leave":
-        this.broadcast({ kind: "player_left", userId: attachment.userId });
+        // Just close the socket; webSocketClose handles state transitions
+        // (broadcast offline if mid-game, free the seat if waiting). The
+        // game itself doesn't end on leave — only on completion or the
+        // 10-minute timeout.
         ws.close(1000, "leave");
         break;
     }
@@ -149,14 +154,19 @@ export class GameRoom implements DurableObject {
       if (a?.userId === userId) return;
     }
 
+    // The user may have already been removed (e.g., handleLeave) — no-op.
+    if (!this.room.players[userId]) return;
+
     if (this.room.status === "in_progress") {
-      // Soft disconnect; keep the seat for reconnection.
+      // Soft disconnect; keep the seat for reconnection. The game still ends
+      // either when someone completes all diffs or at the 10-minute timeout
+      // (which picks a winner from foundCount), so we never auto-forfeit
+      // just because a tab closed.
       this.broadcast({ kind: "player_offline", userId });
       return;
     }
 
     // Waiting state (pre-first-game OR post-game): the seat is given up.
-    if (!this.room.players[userId]) return;
     delete this.room.players[userId];
     this.broadcast({ kind: "player_left", userId });
 
@@ -183,23 +193,50 @@ export class GameRoom implements DurableObject {
     if (!this.room) return;
     const now = Date.now();
 
-    // Hard game timeout.
+    // 1) Idle cleanup — last meaningful activity is older than the threshold.
+    if (now - this.room.lastActivityAt >= ROOM_IDLE_TIMEOUT_MS) {
+      await this.state.storage.deleteAll();
+      this.room = null;
+      return;
+    }
+
+    // 2) Hard game timeout: 10 minutes from startedAt regardless of who's
+    // online. Winner = the player with the most found diffs; tie → no winner.
     if (
       this.room.status === "in_progress" &&
       this.room.startedAt &&
       now - this.room.startedAt >= GAME_TIMEOUT_MS
     ) {
-      await this.endGame(null, "timeout");
-      await this.scheduleIdleCleanup();
-      return;
+      await this.endGame(this.pickTimeoutWinner(), "timeout");
+      // If nobody's connected after a timeout, there's no point holding state.
+      if (this.room && this.state.getWebSockets().length === 0) {
+        await this.state.storage.deleteAll();
+        this.room = null;
+        return;
+      }
     }
 
-    // Idle cleanup.
-    const lastActivity = this.room.startedAt ?? this.room.createdAt;
-    if (now - lastActivity >= ROOM_IDLE_TIMEOUT_MS) {
-      await this.state.storage.deleteAll();
-      this.room = null;
+    if (this.room) await this.scheduleNextAlarm();
+  }
+
+  // Choose a winner at game timeout: whoever found the most diffs. Ties
+  // (including everyone-at-zero) end as a draw with no winner.
+  private pickTimeoutWinner(): string | null {
+    if (!this.room) return null;
+    let best = -1;
+    let winner: string | null = null;
+    let tied = false;
+    for (const p of Object.values(this.room.players)) {
+      const c = totalFound(p);
+      if (c > best) {
+        best = c;
+        winner = p.userId;
+        tied = false;
+      } else if (c === best) {
+        tied = true;
+      }
     }
+    return tied ? null : winner;
   }
 
   // ─── Handlers ────────────────────────────────────────────────────────────
@@ -210,6 +247,7 @@ export class GameRoom implements DurableObject {
         headers: { "content-type": "application/json" },
       });
     }
+    const now = Date.now();
     this.room = {
       code,
       mode,
@@ -217,12 +255,12 @@ export class GameRoom implements DurableObject {
       players: {},
       puzzles: null,
       startedAt: null,
-      createdAt: Date.now(),
+      createdAt: now,
       winnerId: null,
       gamesPlayed: 0,
+      lastActivityAt: now,
     };
     await this.persist();
-    await this.state.storage.setAlarm(Date.now() + ROOM_IDLE_TIMEOUT_MS);
     return new Response(JSON.stringify({ ok: true }), {
       headers: { "content-type": "application/json" },
     });
@@ -290,6 +328,7 @@ export class GameRoom implements DurableObject {
     }
 
     this.send(ws, this.buildWelcome(claims.sub));
+    this.bumpActivity();
     await this.persist();
 
     // Auto-start the FIRST game as soon as the room fills. Rematches still
@@ -317,6 +356,7 @@ export class GameRoom implements DurableObject {
     if (playerList.length >= capacity && playerList.every((p) => p.ready)) {
       await this.startGame();
     } else {
+      this.bumpActivity();
       await this.persist();
     }
   }
@@ -335,7 +375,7 @@ export class GameRoom implements DurableObject {
       startedAt: this.room.startedAt,
       puzzles: puzzles.map((p) => p.puzzle),
     });
-    await this.state.storage.setAlarm(this.room.startedAt + GAME_TIMEOUT_MS);
+    this.bumpActivity();
     await this.persist();
   }
 
@@ -386,32 +426,37 @@ export class GameRoom implements DurableObject {
       return;
     }
 
+    this.bumpActivity();
     await this.persist();
   }
 
-  private async endGame(winnerId: string | null, _reason: string): Promise<void> {
+  private async endGame(winnerId: string | null, reason: EndReason): Promise<void> {
     if (!this.room) return;
     this.room.status = "ended";
     this.room.winnerId = winnerId;
 
-    // Persist game results to D1 for everyone with a complete run.
-    const rows: Array<typeof gameResults.$inferInsert> = [];
-    for (const p of Object.values(this.room.players)) {
-      if (p.elapsedMs == null && p.userId === winnerId && this.room.startedAt) {
-        p.elapsedMs = Date.now() - this.room.startedAt;
+    // Persist to leaderboard only on legitimate completions (all diffs
+    // found). A timeout winner found more than the loser but didn't finish
+    // the round, so they don't earn a leaderboard record.
+    if (reason === "winner") {
+      const rows: Array<typeof gameResults.$inferInsert> = [];
+      for (const p of Object.values(this.room.players)) {
+        if (p.elapsedMs == null && p.userId === winnerId && this.room.startedAt) {
+          p.elapsedMs = Date.now() - this.room.startedAt;
+        }
+        if (p.elapsedMs != null) {
+          rows.push({
+            id: crypto.randomUUID(),
+            userId: p.userId,
+            roomCode: this.room.code,
+            mode: this.room.mode,
+            elapsedMs: p.elapsedMs,
+          });
+        }
       }
-      if (p.elapsedMs != null) {
-        rows.push({
-          id: crypto.randomUUID(),
-          userId: p.userId,
-          roomCode: this.room.code,
-          mode: this.room.mode,
-          elapsedMs: p.elapsedMs,
-        });
+      if (rows.length > 0) {
+        await getDb(this.env.DB).insert(gameResults).values(rows).run();
       }
-    }
-    if (rows.length > 0) {
-      await getDb(this.env.DB).insert(gameResults).values(rows).run();
     }
 
     // Report every player's elapsed time in the broadcast so losers can show
@@ -442,6 +487,7 @@ export class GameRoom implements DurableObject {
     this.room.winnerId = null;
     this.room.gamesPlayed += 1;
 
+    this.bumpActivity();
     await this.persist();
   }
 
@@ -514,12 +560,26 @@ export class GameRoom implements DurableObject {
     }
   }
 
-  private async persist(): Promise<void> {
-    if (this.room) await this.state.storage.put("room", this.room);
+  private bumpActivity(): void {
+    if (this.room) this.room.lastActivityAt = Date.now();
   }
 
-  private async scheduleIdleCleanup(): Promise<void> {
-    await this.state.storage.setAlarm(Date.now() + ROOM_IDLE_TIMEOUT_MS);
+  private async persist(): Promise<void> {
+    if (!this.room) return;
+    await this.state.storage.put("room", this.room);
+    await this.scheduleNextAlarm();
+  }
+
+  // The DO has a single alarm slot; pick the earliest deadline that matters
+  // so we never sit on stale state without a future tick.
+  private async scheduleNextAlarm(): Promise<void> {
+    if (!this.room) return;
+    const deadlines: number[] = [this.room.lastActivityAt + ROOM_IDLE_TIMEOUT_MS];
+    if (this.room.status === "in_progress" && this.room.startedAt) {
+      deadlines.push(this.room.startedAt + GAME_TIMEOUT_MS);
+    }
+    const next = Math.min(...deadlines);
+    await this.state.storage.setAlarm(next);
   }
 }
 
