@@ -14,3 +14,12 @@ body {
   align-items: center;
   position: relative;
 }
+
+/* React-driven DOM UI overlay. Absolute over the canvas. By default the
+ * container does not swallow clicks — individual modals/buttons opt in
+ * via pointer-events: auto. */
+#react-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}

@@ -18,9 +18,7 @@ import { NavButtons } from "../components/NavButtons";
 import { MenuIcon } from "../components/MenuIcon";
 import { CelebrationEffect } from "../components/CelebrationEffect";
 import { CountdownOverlay } from "../components/CountdownOverlay";
-import { GameHud } from "../ui/dom/GameHud";
-import { PauseModal } from "../ui/dom/PauseModal";
-import { GameCompleteModal } from "../ui/dom/GameCompleteModal";
+import { useUIStore } from "../ui/store";
 
 export class GameScene extends Container implements IScene {
   private app: Application;
@@ -34,15 +32,11 @@ export class GameScene extends Container implements IScene {
   private rightMarkersContainer: Container;
   private rightHitArea: Container | null = null;
 
-  // UI (Pixi: in-canvas controls)
+  // UI (Pixi: in-canvas controls). Text-heavy HUD + modals live in the React
+  // layer — see src/ui/react + ui/store.
   private uiLayer: Container;
   private navButtons: NavButtons;
   private menuIcon: MenuIcon;
-
-  // UI (DOM: text-heavy HUD + modals — sharper text, native styling)
-  private hud: GameHud;
-  private pauseModal: PauseModal;
-  private gameCompleteModal: GameCompleteModal;
 
   // Overlays
   private overlayLayer: Container;
@@ -60,13 +54,14 @@ export class GameScene extends Container implements IScene {
 
   // End-of-game state (set once game_end arrives)
   private gameEnded = false;
-  private opponentOnline = true;
 
   // When non-null, `update()` freezes the timer at this value. Used to show
   // the server's final elapsedMs verbatim after game_end.
   private timerFrozenAtSec: number | null = null;
 
-  // Track off-screen WS handlers so we can detach on destroy
+  // Track listener off-handles so we can detach on destroy without using
+  // gameState.removeAllListeners() (which would also wipe the uiStore bridge).
+  private offStateListeners: (() => void)[] = [];
   private offClickResult?: () => void;
   private offGameEnd?: () => void;
   private offPlayerLeft?: () => void;
@@ -89,11 +84,6 @@ export class GameScene extends Container implements IScene {
     this.countdownOverlay = new CountdownOverlay(app.screen.width, app.screen.height);
     this.celebrationEffect = new CelebrationEffect();
 
-    const isOneOnOne = gameState.getState().gameType === "one_on_one";
-    this.hud = new GameHud({ showOpponent: isOneOnOne });
-    this.pauseModal = new PauseModal();
-    this.gameCompleteModal = new GameCompleteModal();
-
     this.addChild(this.placeholderContainer, this.gameArea, this.uiLayer, this.overlayLayer);
   }
 
@@ -103,6 +93,16 @@ export class GameScene extends Container implements IScene {
     this.setupOverlays();
     this.setupStateListeners();
     this.setupSocketListeners();
+
+    // React overlay reads from the store; publish HUD + wire modal callbacks.
+    const ui = useUIStore.getState();
+    ui.mountHud();
+    ui.setCallbacks({
+      onResume: () => this.resumeGame(),
+      onMainMenu: () => game.showMainMenu(),
+      onPlayAgain: () => this.handlePlayAgain(),
+      onPauseRequest: () => this.showPauseMenu(),
+    });
 
     this.createPlaceholders();
     this.gameArea.visible = false;
@@ -186,88 +186,59 @@ export class GameScene extends Container implements IScene {
     );
     this.navButtons.updateState(0, IMAGES_PER_GAME);
     this.uiLayer.addChild(this.navButtons);
-
-    if (state.gameType === "one_on_one") {
-      this.hud.updateOpponent(state.opponentFoundCount, true);
-    }
-
-    // Hydrate my progress count too (non-zero on resume from a mid-game
-    // reconnect where some diffs were already found before the reload).
-    this.hud.updateFoundCount(state.foundCount);
-    this.hud.updateImageIndex(state.currentImageIndex);
+    // HUD state (foundCount, currentImageIndex, opponentFoundCount, gameType)
+    // was hydrated from gameState by ui.mountHud() in init() and stays in
+    // sync via the store<->gameState bridge. Nothing to wire here.
   }
 
   private setupOverlays(): void {
-    this.pauseModal.setCallbacks(
-      () => this.resumeGame(),
-      () => game.showMainMenu(),
-    );
-
-    const state = gameState.getState();
-    if (state.gameType === "one_on_one") {
-      // Rematch path: stay in the same room; send `ready` and wait for the
-      // opponent. Game.ts handles the transition on the next `game_start`.
-      this.gameCompleteModal.setCallbacks(
-        () => this.requestRematch(),
-        () => game.showMainMenu(),
-      );
-    } else {
-      this.gameCompleteModal.setCallbacks(
-        () => game.startSinglePlayer(),
-        () => game.showMainMenu(),
-      );
-    }
+    // Modal callbacks are registered on the store in init(); nothing to wire
+    // here beyond the still-Pixi overlays below.
     this.overlayLayer.addChild(this.countdownOverlay);
     this.overlayLayer.addChild(this.celebrationEffect);
   }
 
-  private requestRematch(): void {
-    game.sendReady();
-    this.gameCompleteModal.markRematchPending();
+  private handlePlayAgain(): void {
+    const state = gameState.getState();
+    if (state.gameType === "one_on_one") {
+      // Rematch path: stay in the same room; send `ready` and wait for the
+      // opponent. Game.ts handles the transition on the next `game_start`.
+      game.sendReady();
+      useUIStore.getState().markRematchPending();
+    } else {
+      game.startSinglePlayer();
+    }
   }
 
   private setupStateListeners(): void {
-    gameState.on("differenceFound", ({ diffIndex, total }) => {
-      this.hud.updateFoundCount(total);
+    // Text counters (foundCount, imageIndex, opponentCount) are mirrored into
+    // the React store by src/ui/store.ts — this scene only listens for the
+    // side effects that affect Pixi objects.
+    const on = <T>(event: string, handler: (payload: T) => void) => {
+      gameState.on(event, handler);
+      this.offStateListeners.push(() => gameState.off(event, handler));
+    };
+
+    on<{ diffIndex: number }>("differenceFound", ({ diffIndex }) => {
       this.addMarkerForDiff(diffIndex);
     });
 
-    gameState.on("imageCompleted", () => {
+    on<void>("imageCompleted", () => {
       this.playCelebration();
     });
 
-    // Completion is server-authoritative. On local completion we just pause
-    // the timer; the result screen appears when the server's `game_end`
-    // message arrives (handled in setupSocketListeners).
-    gameState.on("gameCompleted", () => {
-      // no-op: timer now read-only from server state
-    });
-
-    gameState.on("gameLost", () => {
-      // no-op: timer now read-only from server state
-    });
-
-    gameState.on("imageChanged", (index: number) => {
+    on<number>("imageChanged", (index) => {
       this.loadCurrentImage();
-      this.hud.updateImageIndex(index);
       this.navButtons.updateState(index, IMAGES_PER_GAME);
     });
 
-    gameState.on("inputDisabled", () => this.setInputEnabled(false));
-    gameState.on("inputEnabled", () => this.setInputEnabled(true));
+    on<void>("inputDisabled", () => this.setInputEnabled(false));
+    on<void>("inputEnabled", () => this.setInputEnabled(true));
 
     // Timer is now server-driven (see update()); modeChanged just governs
-    // input via other listeners.
-
-    gameState.on("opponentDifferenceFound", () => {
-      this.refreshOpponentText();
-    });
-  }
-
-  private refreshOpponentText(): void {
-    const state = gameState.getState();
-    if (state.gameType !== "one_on_one") return;
-    this.hud.updateOpponent(state.opponentFoundCount, this.opponentOnline);
+    // input via other listeners. Likewise, gameCompleted/gameLost are
+    // no-ops here — the result screen is driven by `game_end` from the
+    // socket layer.
   }
 
   private setupSocketListeners(): void {
@@ -310,13 +281,12 @@ export class GameScene extends Container implements IScene {
       const myElapsedSec = mine?.elapsedMs != null ? mine.elapsedMs / 1000 : 0;
       this.timerFrozenAtSec = myElapsedSec;
 
+      const ui = useUIStore.getState();
       if (state.gameType === "one_on_one") {
         const isWin = msg.winnerId === myId;
-        this.gameCompleteModal.showResult(isWin ? "win" : "lose", myElapsedSec, {
-          playAgainLabel: "Rematch",
-        });
+        ui.showComplete1v1(isWin ? "win" : "lose", myElapsedSec);
       } else {
-        this.gameCompleteModal.show(myElapsedSec);
+        ui.showCompleteSingle(myElapsedSec);
       }
     };
 
@@ -351,8 +321,7 @@ export class GameScene extends Container implements IScene {
   }
 
   private setOpponentOnline(online: boolean): void {
-    this.opponentOnline = online;
-    this.refreshOpponentText();
+    useUIStore.getState().setOpponentOnline(online);
   }
 
   private loadCurrentImage(): void {
@@ -509,25 +478,26 @@ export class GameScene extends Container implements IScene {
     gameState.pause();
     this.createPlaceholders();
     this.gameArea.visible = false;
-    this.pauseModal.show();
+    useUIStore.getState().openPause();
   }
 
   private resumeGame(): void {
     gameState.resume();
     this.placeholderContainer.removeChildren();
     this.gameArea.visible = true;
-    this.pauseModal.hide();
+    useUIStore.getState().closePause();
   }
 
   update(_deltaTime: number): void {
+    const ui = useUIStore.getState();
     if (this.timerFrozenAtSec != null) {
-      this.hud.setTime(this.timerFrozenAtSec);
+      ui.setTimerSec(this.timerFrozenAtSec);
       return;
     }
     const state = gameState.getState();
     if (!state.serverStartedAt) return;
     const elapsedSec = Math.max(0, (Date.now() - state.serverStartedAt) / 1000);
-    this.hud.setTime(elapsedSec);
+    ui.setTimerSec(elapsedSec);
   }
 
   resize(width: number, height: number): void {
@@ -552,12 +522,11 @@ export class GameScene extends Container implements IScene {
     this.offPlayerLeft?.();
     this.offPlayerOffline?.();
     this.offPlayerOnline?.();
+    for (const off of this.offStateListeners) off();
+    this.offStateListeners = [];
 
-    this.hud.destroy();
-    this.pauseModal.destroy();
-    this.gameCompleteModal.destroy();
+    useUIStore.getState().unmountHud();
 
-    gameState.removeAllListeners();
     this.removeAllListeners();
     super.destroy({ children: true });
   }
