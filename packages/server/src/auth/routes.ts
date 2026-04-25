@@ -205,12 +205,13 @@ protectedRoutes.get("/me", async (c) => {
   if (!row) {
     return c.json({ error: { code: "not_found", message: "User gone" } }, 404);
   }
-  // Wins = number of game_results rows for this user. Guest rows are never
-  // inserted (see GameRoom.endGame), so guests always read 0.
+  // Wins = number of 1v1 victories. Single-mode completions are still
+  // persisted (for the fastest-time leaderboard) but don't count as wins.
+  // Guest rows are never inserted (see GameRoom.endGame), so guests read 0.
   const winsRow = await db
     .select({ c: sql<number>`COUNT(*)` })
     .from(gameResults)
-    .where(eq(gameResults.userId, claims.sub))
+    .where(and(eq(gameResults.userId, claims.sub), eq(gameResults.mode, "1v1")))
     .get();
   return c.json({
     user: { userId: row.id, name: row.name, isGuest: row.isGuest === 1 },
