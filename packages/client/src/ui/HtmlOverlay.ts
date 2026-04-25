@@ -60,12 +60,14 @@ export class HtmlOverlay {
 
   createInput(
     parent: HTMLElement,
-    options: { type: string; placeholder: string; name: string },
+    options: { type: string; placeholder: string; name: string; autocomplete?: string },
   ): HTMLInputElement {
     const input = document.createElement("input");
     input.type = options.type;
     input.placeholder = options.placeholder;
     input.name = options.name;
+    if (options.autocomplete !== undefined)
+      input.setAttribute("autocomplete", options.autocomplete);
     Object.assign(input.style, {
       padding: "10px 12px",
       height: "40px",
@@ -97,7 +99,7 @@ export class HtmlOverlay {
   // of helper text under the field.
   createInputWithHint(
     parent: HTMLElement,
-    options: { type: string; placeholder: string; name: string },
+    options: { type: string; placeholder: string; name: string; autocomplete?: string },
     hint: { title: string; items: string[] },
   ): HTMLInputElement {
     const wrap = document.createElement("div");
@@ -191,6 +193,81 @@ export class HtmlOverlay {
     });
 
     return input;
+  }
+
+  // Wraps a password input with a show/hide toggle button at its right edge.
+  // Coexists with createInputWithHint by shifting any existing right-pinned
+  // sibling icon further left to make room.
+  addPasswordToggle(input: HTMLInputElement): HTMLButtonElement {
+    let wrap = input.parentElement as HTMLElement | null;
+    if (!wrap || wrap.style.position !== "relative") {
+      const newWrap = document.createElement("div");
+      Object.assign(newWrap.style, { position: "relative", width: "100%" });
+      const grandParent = input.parentElement;
+      if (grandParent) {
+        grandParent.insertBefore(newWrap, input);
+        newWrap.appendChild(input);
+      }
+      wrap = newWrap;
+    }
+
+    let hasNeighbor = false;
+    for (const child of Array.from(wrap.children)) {
+      if (child === input) continue;
+      const el = child as HTMLElement;
+      if (el.style.position === "absolute" && el.style.right === "8px") {
+        el.style.right = "40px";
+        hasNeighbor = true;
+      }
+    }
+    input.style.paddingRight = hasNeighbor ? "68px" : "36px";
+
+    const EYE_OPEN =
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const EYE_OFF =
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.tabIndex = 0;
+    btn.setAttribute("aria-label", "Show password");
+    btn.innerHTML = EYE_OPEN;
+    Object.assign(btn.style, {
+      position: "absolute",
+      right: "8px",
+      top: "50%",
+      transform: "translateY(-50%)",
+      width: "28px",
+      height: "28px",
+      border: "none",
+      background: "transparent",
+      color: TOKENS.textSecondary,
+      cursor: "pointer",
+      padding: "0",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: "4px",
+    });
+    btn.addEventListener("mouseenter", () => {
+      btn.style.color = TOKENS.text;
+    });
+    btn.addEventListener("mouseleave", () => {
+      btn.style.color = TOKENS.textSecondary;
+    });
+    wrap.appendChild(btn);
+
+    let visible = false;
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      visible = !visible;
+      input.type = visible ? "text" : "password";
+      btn.innerHTML = visible ? EYE_OFF : EYE_OPEN;
+      btn.setAttribute("aria-label", visible ? "Hide password" : "Show password");
+      input.focus();
+    });
+
+    return btn;
   }
 
   createButton(

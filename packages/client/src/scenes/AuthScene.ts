@@ -119,30 +119,30 @@ export class AuthScene extends Container implements IScene {
       type: "text",
       placeholder: "Username",
       name: "username",
+      autocomplete: "username",
     });
     const passwordInput = isSignUp
       ? this.overlay.createInputWithHint(
           card,
-          { type: "password", placeholder: "Password", name: "password" },
+          {
+            type: "password",
+            placeholder: "Password",
+            name: "password",
+            autocomplete: "new-password",
+          },
           { title: PASSWORD_HINT.title, items: [...PASSWORD_HINT.items] },
         )
       : this.overlay.createInput(card, {
           type: "password",
           placeholder: "Password",
           name: "password",
+          autocomplete: "current-password",
         });
+    this.overlay.addPasswordToggle(passwordInput);
 
     let strengthMeter: ReturnType<HtmlOverlay["createStrengthMeter"]> | null = null;
-    let confirmInput: HTMLInputElement | null = null;
-    let confirmHelper: HTMLParagraphElement | null = null;
     if (isSignUp) {
       strengthMeter = this.overlay.createStrengthMeter(card);
-      confirmInput = this.overlay.createInput(card, {
-        type: "password",
-        placeholder: "Confirm password",
-        name: "passwordConfirm",
-      });
-      confirmHelper = this.overlay.createHelperText(card);
     }
 
     const errorText = this.overlay.createErrorText(card);
@@ -188,21 +188,6 @@ export class AuthScene extends Container implements IScene {
       strengthMeter.update(r.score, detail ? `${r.label} — ${detail}` : r.label);
     };
 
-    const recomputeConfirm = () => {
-      if (!confirmInput || !confirmHelper) return;
-      if (!confirmInput.value) {
-        confirmHelper.textContent = "";
-        confirmHelper.style.color = "#5F6368";
-        return;
-      }
-      if (confirmInput.value !== passwordInput.value) {
-        confirmHelper.textContent = "Passwords do not match";
-        confirmHelper.style.color = "#D93025";
-      } else {
-        confirmHelper.textContent = "";
-      }
-    };
-
     // Server-side rules mirrored here so the submit button only becomes
     // clickable once the form would actually be accepted. zxcvbn output
     // (the strength meter) is informational, not part of the gate.
@@ -213,7 +198,6 @@ export class AuthScene extends Container implements IScene {
       if (!/^[A-Za-z0-9_]+$/.test(username)) return false;
       if (password.length < 8 || password.length > 128) return false;
       if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return false;
-      if (confirmInput && confirmInput.value !== password) return false;
       return true;
     };
 
@@ -227,15 +211,10 @@ export class AuthScene extends Container implements IScene {
       overlay.setButtonEnabled(submitBtn, false);
       passwordInput.addEventListener("input", () => {
         recomputeStrength();
-        recomputeConfirm();
         refreshSubmit();
       });
       usernameInput.addEventListener("input", () => {
         recomputeStrength();
-        refreshSubmit();
-      });
-      confirmInput?.addEventListener("input", () => {
-        recomputeConfirm();
         refreshSubmit();
       });
     }
@@ -245,10 +224,6 @@ export class AuthScene extends Container implements IScene {
       const password = passwordInput.value;
       if (!username || !password) {
         errorText.textContent = "Username and password are required.";
-        return;
-      }
-      if (isSignUp && confirmInput && confirmInput.value !== password) {
-        errorText.textContent = "Passwords do not match.";
         return;
       }
       overlay.setButtonEnabled(submitBtn, false);
@@ -298,7 +273,6 @@ export class AuthScene extends Container implements IScene {
     };
     usernameInput.addEventListener("keydown", onKeyDown);
     passwordInput.addEventListener("keydown", onKeyDown);
-    confirmInput?.addEventListener("keydown", onKeyDown);
 
     usernameInput.focus();
   }
@@ -418,6 +392,7 @@ export class AuthScene extends Container implements IScene {
       type: "text",
       placeholder: "Username or email",
       name: "identifier",
+      autocomplete: "username",
     });
 
     const status = this.overlay.createErrorText(card);

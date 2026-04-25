@@ -11,12 +11,13 @@ compatibility_flags = ["nodejs_compat"]
 JWT_ISSUER = "differ"
 CDN_BASE = "https://differ-assets.joe-brothers.com"
 ALLOWED_ORIGINS = ""
+TURNSTILE_SECRET = ""
 
 # Declared secrets. wrangler validates these are set (via .dev.vars locally,
 # `wrangler secret put` remotely) before dev/deploy. Any value listed here must
 # NOT also appear in [vars], or the var would overwrite the secret on deploy.
 [secrets]
-required = ["JWT_SECRET", "TURNSTILE_SECRET"]
+required = ["JWT_SECRET"]
 
 [[d1_databases]]
 binding = "DB"

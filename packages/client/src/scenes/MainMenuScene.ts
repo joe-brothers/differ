@@ -341,19 +341,20 @@ export class MainMenuScene extends Container implements IScene {
       type: "text",
       placeholder: "Username",
       name: "username",
+      autocomplete: "username",
     });
     const passwordInput = this.upgradeOverlay.createInputWithHint(
       card,
-      { type: "password", placeholder: "Password", name: "password" },
+      {
+        type: "password",
+        placeholder: "Password",
+        name: "password",
+        autocomplete: "new-password",
+      },
       { title: PASSWORD_HINT.title, items: [...PASSWORD_HINT.items] },
     );
+    this.upgradeOverlay.addPasswordToggle(passwordInput);
     const meter = this.upgradeOverlay.createStrengthMeter(card);
-    const confirmInput = this.upgradeOverlay.createInput(card, {
-      type: "password",
-      placeholder: "Confirm password",
-      name: "passwordConfirm",
-    });
-    const matchHelper = this.upgradeOverlay.createHelperText(card);
 
     const errorText = this.upgradeOverlay.createErrorText(card);
     const submitBtn = this.upgradeOverlay.createButton(card, "Save");
@@ -367,18 +368,6 @@ export class MainMenuScene extends Container implements IScene {
         passwordInput.value ? (detail ? `${r.label} — ${detail}` : r.label) : "",
       );
     };
-    const refreshMatch = () => {
-      if (!confirmInput.value) {
-        matchHelper.textContent = "";
-        return;
-      }
-      if (confirmInput.value !== passwordInput.value) {
-        matchHelper.style.color = "#D93025";
-        matchHelper.textContent = "Passwords do not match";
-      } else {
-        matchHelper.textContent = "";
-      }
-    };
 
     // Mirror the server-side rules so the Save button only lights up once
     // the form would actually be accepted (matches AuthScene signup).
@@ -391,7 +380,6 @@ export class MainMenuScene extends Container implements IScene {
       if (!/^[A-Za-z0-9_]+$/.test(username)) return false;
       if (password.length < 8 || password.length > 128) return false;
       if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return false;
-      if (confirmInput.value !== password) return false;
       return true;
     };
     const refreshSubmit = () => overlay.setButtonEnabled(submitBtn, isFormValid());
@@ -399,15 +387,10 @@ export class MainMenuScene extends Container implements IScene {
 
     passwordInput.addEventListener("input", () => {
       refreshStrength();
-      refreshMatch();
       refreshSubmit();
     });
     usernameInput.addEventListener("input", () => {
       refreshStrength();
-      refreshSubmit();
-    });
-    confirmInput.addEventListener("input", () => {
-      refreshMatch();
       refreshSubmit();
     });
 
@@ -421,10 +404,6 @@ export class MainMenuScene extends Container implements IScene {
       const password = passwordInput.value;
       if (!username || !password) {
         errorText.textContent = "Username and password are required.";
-        return;
-      }
-      if (confirmInput.value !== password) {
-        errorText.textContent = "Passwords do not match.";
         return;
       }
       overlay.setButtonEnabled(submitBtn, false);
@@ -457,7 +436,6 @@ export class MainMenuScene extends Container implements IScene {
     };
     usernameInput.addEventListener("keydown", onKeyDown);
     passwordInput.addEventListener("keydown", onKeyDown);
-    confirmInput.addEventListener("keydown", onKeyDown);
     usernameInput.focus();
   }
 
@@ -556,14 +534,19 @@ export class MainMenuScene extends Container implements IScene {
         type: "password",
         placeholder: "Confirm with current password",
         name: "disable-pwd",
+        autocomplete: "current-password",
       });
-      pwdInput.style.display = "none";
+      overlay.addPasswordToggle(pwdInput);
+      // The toggle wraps pwdInput in a relative div; hide that wrapper, not
+      // the input alone, so the eye button hides with the field.
+      const pwdWrap = pwdInput.parentElement ?? pwdInput;
+      (pwdWrap as HTMLElement).style.display = "none";
       const errText = overlay.createErrorText(dyn);
       let armed = false;
       disableBtn.addEventListener("click", async () => {
         if (!armed) {
           armed = true;
-          pwdInput.style.display = "block";
+          (pwdWrap as HTMLElement).style.display = "block";
           disableBtn.textContent = "Confirm Disable";
           pwdInput.focus();
           return;
@@ -612,6 +595,7 @@ export class MainMenuScene extends Container implements IScene {
       type: "email",
       placeholder: "you@example.com",
       name: "email",
+      autocomplete: "email",
     });
     if (currentEmail) emailInput.value = currentEmail;
     const emailErr = overlay.createErrorText(dyn);
@@ -700,6 +684,7 @@ export class MainMenuScene extends Container implements IScene {
       type: "text",
       placeholder: "6-digit code",
       name: "totp-verify",
+      autocomplete: "one-time-code",
     });
     codeInput.inputMode = "numeric";
     codeInput.maxLength = 6;

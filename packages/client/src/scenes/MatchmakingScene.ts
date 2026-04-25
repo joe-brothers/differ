@@ -288,6 +288,7 @@ export class MatchmakingScene extends Container implements IScene {
       type: "text",
       placeholder: "ABC123",
       name: "roomCode",
+      autocomplete: "off",
     });
     codeInput.maxLength = 6;
     codeInput.style.letterSpacing = "4px";
