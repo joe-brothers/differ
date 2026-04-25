@@ -60,6 +60,7 @@ enabled = true
 
 [env.production]
 name = "differ-server"
+routes = [{ pattern = "api.differ.joe-brothers.com/*", custom_domain = true }]
 
 [env.production.vars]
 JWT_ISSUER = "differ"
