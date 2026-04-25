@@ -24,6 +24,10 @@ leaderboardRoutes.get("/", async (c) => {
   const wins = count().as("wins");
   const bestMs = min(gameResults.elapsedMs).as("best_ms");
 
+  // Single sprint is a time attack — rank by best completion time.
+  // 1v1 is win-based — rank by wins, with best time as the tiebreaker.
+  const orderBy = mode === "single" ? [asc(bestMs)] : [desc(wins), asc(bestMs)];
+
   const results = await db
     .select({
       userId: users.id,
@@ -35,7 +39,7 @@ leaderboardRoutes.get("/", async (c) => {
     .innerJoin(users, eq(users.id, gameResults.userId))
     .where(eq(gameResults.mode, mode))
     .groupBy(users.id, users.name)
-    .orderBy(desc(wins), asc(bestMs))
+    .orderBy(...orderBy)
     .limit(limit)
     .offset(offset);
 

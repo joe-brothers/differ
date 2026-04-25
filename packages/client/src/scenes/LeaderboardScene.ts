@@ -7,9 +7,18 @@ import type { LeaderboardEntry } from "@differ/shared";
 
 type LbMode = "single" | "1v1";
 
+const FONT_SANS = "Arial, sans-serif";
+const FONT_MONO = '"Roboto Mono", "JetBrains Mono", ui-monospace, monospace';
+
+const ROW_HEIGHT = 44;
+const HEADER_HEIGHT = 36;
+// Both modes show a single metric column (single → Best time, 1v1 → Wins).
+const CARD_WIDTH = 460;
+const HORIZONTAL_PADDING = 16;
+
 export class LeaderboardScene extends Container implements IScene {
   private app: Application;
-  private entriesContainer: Container;
+  private tableContainer: Container;
   private tabs: { single: Container; onevone: Container } | null = null;
   private loadingText: Text | null = null;
   private currentMode: LbMode = "single";
@@ -17,25 +26,28 @@ export class LeaderboardScene extends Container implements IScene {
   constructor(app: Application) {
     super();
     this.app = app;
-    this.entriesContainer = new Container();
+    this.tableContainer = new Container();
   }
 
   async init(): Promise<void> {
     this.createTitle();
     this.createTabs();
     this.createBackButton();
-    this.addChild(this.entriesContainer);
+    this.addChild(this.tableContainer);
 
     this.loadingText = new Text({
       text: "Loading...",
       style: {
-        fontFamily: "Arial, sans-serif",
-        fontSize: 20,
+        fontFamily: FONT_SANS,
+        fontSize: 14,
         fill: COLORS.textSecondary,
       },
     });
     this.loadingText.anchor.set(0.5);
-    this.loadingText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
+    this.loadingText.position.set(
+      Math.round(this.app.screen.width / 2),
+      Math.round(this.app.screen.height / 2),
+    );
     this.addChild(this.loadingText);
 
     await this.loadMode(this.currentMode);
@@ -45,14 +57,14 @@ export class LeaderboardScene extends Container implements IScene {
     const title = new Text({
       text: "Leaderboard",
       style: {
-        fontFamily: "Arial, sans-serif",
+        fontFamily: FONT_SANS,
         fontSize: 28,
         fontWeight: "500",
         fill: COLORS.text,
       },
     });
     title.anchor.set(0.5, 0);
-    title.position.set(this.app.screen.width / 2, UI_PADDING);
+    title.position.set(Math.round(this.app.screen.width / 2), UI_PADDING);
     this.addChild(title);
   }
 
@@ -62,7 +74,7 @@ export class LeaderboardScene extends Container implements IScene {
     const tabHeight = 36;
     const gap = 12;
     const totalWidth = tabWidth * 2 + gap;
-    const startX = this.app.screen.width / 2 - totalWidth / 2;
+    const startX = Math.round(this.app.screen.width / 2 - totalWidth / 2);
 
     const singleTab = this.makeTab("5 Sprint", tabWidth, tabHeight, () => {
       this.setMode("single");
@@ -89,7 +101,7 @@ export class LeaderboardScene extends Container implements IScene {
     const text = new Text({
       text: label,
       style: {
-        fontFamily: "Arial, sans-serif",
+        fontFamily: FONT_SANS,
         fontSize: 14,
         fontWeight: "500",
         fill: COLORS.textSecondary,
@@ -129,15 +141,17 @@ export class LeaderboardScene extends Container implements IScene {
   }
 
   private async loadMode(mode: LbMode): Promise<void> {
-    this.entriesContainer.removeChildren();
+    this.tableContainer.removeChildren();
     if (this.loadingText) {
       this.loadingText.text = "Loading...";
       this.loadingText.visible = true;
     }
     try {
       const result = await leaderboardApi.list(mode, 20, 0);
+      // Drop request if the user switched modes while we were waiting.
+      if (this.currentMode !== mode) return;
       if (this.loadingText) this.loadingText.visible = false;
-      this.renderEntries(result.entries);
+      this.renderEntries(result.entries, mode);
     } catch {
       if (this.loadingText) this.loadingText.text = "Failed to load leaderboard";
     }
@@ -159,7 +173,7 @@ export class LeaderboardScene extends Container implements IScene {
     const text = new Text({
       text: "Back",
       style: {
-        fontFamily: "Arial, sans-serif",
+        fontFamily: FONT_SANS,
         fontSize: 14,
         fontWeight: "500",
         fill: COLORS.primaryOn,
@@ -178,60 +192,165 @@ export class LeaderboardScene extends Container implements IScene {
     this.addChild(button);
   }
 
-  private renderEntries(entries: LeaderboardEntry[]): void {
-    this.entriesContainer.removeChildren();
+  private renderEntries(entries: LeaderboardEntry[], mode: LbMode): void {
+    this.tableContainer.removeChildren();
 
-    const startY = UI_PADDING + 120;
-    const rowHeight = 40;
-    const centerX = this.app.screen.width / 2;
+    const cardX = Math.round(this.app.screen.width / 2 - CARD_WIDTH / 2);
+    const cardY = UI_PADDING + 130;
+    this.tableContainer.position.set(cardX, cardY);
 
     if (entries.length === 0) {
-      const noData = new Text({
-        text: "No records yet. Be the first!",
-        style: {
-          fontFamily: "Arial, sans-serif",
-          fontSize: 20,
-          fill: COLORS.textSecondary,
-        },
-      });
-      noData.anchor.set(0.5);
-      noData.position.set(centerX, this.app.screen.height / 2);
-      this.entriesContainer.addChild(noData);
+      this.renderEmptyCard();
       return;
     }
 
-    const header = new Text({
-      text: "  #    Player              Wins    Best",
+    const cardHeight = HEADER_HEIGHT + entries.length * ROW_HEIGHT;
+
+    // Card surface
+    const card = new Graphics();
+    card.roundRect(0, 0, CARD_WIDTH, cardHeight, 8);
+    card.fill(COLORS.surface);
+    card.stroke({ color: COLORS.border, width: 1 });
+    this.tableContainer.addChild(card);
+
+    // Header
+    this.tableContainer.addChild(this.buildHeader(mode));
+
+    // Header divider
+    const headerDivider = new Graphics();
+    headerDivider.rect(0, HEADER_HEIGHT, CARD_WIDTH, 1);
+    headerDivider.fill(COLORS.border);
+    this.tableContainer.addChild(headerDivider);
+
+    for (let i = 0; i < entries.length; i++) {
+      const rowY = HEADER_HEIGHT + i * ROW_HEIGHT;
+      this.tableContainer.addChild(this.buildRow(entries[i], rowY, mode));
+      if (i < entries.length - 1) {
+        const divider = new Graphics();
+        divider.rect(HORIZONTAL_PADDING, rowY + ROW_HEIGHT, CARD_WIDTH - HORIZONTAL_PADDING * 2, 1);
+        divider.fill(COLORS.border);
+        this.tableContainer.addChild(divider);
+      }
+    }
+  }
+
+  private renderEmptyCard(): void {
+    const cardHeight = 96;
+    const card = new Graphics();
+    card.roundRect(0, 0, CARD_WIDTH, cardHeight, 8);
+    card.fill(COLORS.surface);
+    card.stroke({ color: COLORS.border, width: 1 });
+    this.tableContainer.addChild(card);
+
+    const msg = new Text({
+      text: "No records yet. Be the first.",
       style: {
-        fontFamily: "monospace",
-        fontSize: 16,
+        fontFamily: FONT_SANS,
+        fontSize: 14,
         fill: COLORS.textSecondary,
       },
     });
-    header.anchor.set(0.5, 0);
-    header.position.set(centerX, startY);
-    this.entriesContainer.addChild(header);
+    msg.anchor.set(0.5);
+    msg.position.set(Math.round(CARD_WIDTH / 2), Math.round(cardHeight / 2));
+    this.tableContainer.addChild(msg);
+  }
 
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      const rankColor = entry.rank <= 3 ? COLORS.gold : COLORS.text;
-      const rankStr = entry.rank.toString().padStart(3, " ");
-      const nameStr = entry.name.padEnd(20, " ").slice(0, 20);
-      const winsStr = entry.wins.toString().padStart(4, " ");
-      const bestStr = entry.bestMs != null ? formatMs(entry.bestMs) : "   --";
+  private buildHeader(mode: LbMode): Container {
+    const header = new Container();
 
-      const row = new Text({
-        text: `${rankStr}   ${nameStr} ${winsStr}  ${bestStr}`,
+    const make = (label: string, x: number, anchorX: 0 | 1) => {
+      const t = new Text({
+        text: label.toUpperCase(),
         style: {
-          fontFamily: "monospace",
-          fontSize: 16,
-          fill: rankColor,
+          fontFamily: FONT_SANS,
+          fontSize: 11,
+          fontWeight: "500",
+          letterSpacing: 0.5,
+          fill: COLORS.textSecondary,
         },
       });
-      row.anchor.set(0.5, 0);
-      row.position.set(centerX, startY + (i + 1) * rowHeight);
-      this.entriesContainer.addChild(row);
+      t.anchor.set(anchorX, 0.5);
+      t.position.set(Math.round(x), Math.round(HEADER_HEIGHT / 2));
+      header.addChild(t);
+    };
+
+    make("Rank", HORIZONTAL_PADDING, 0);
+    make("Player", HORIZONTAL_PADDING + 64, 0);
+    make(mode === "single" ? "Best" : "Wins", CARD_WIDTH - HORIZONTAL_PADDING, 1);
+
+    return header;
+  }
+
+  private buildRow(entry: LeaderboardEntry, rowY: number, mode: LbMode): Container {
+    const row = new Container();
+    row.position.set(0, rowY);
+
+    // Rank chip — top 3 get gold-on-amber, others a plain neutral chip.
+    const rankChip = this.buildRankChip(entry.rank);
+    rankChip.position.set(HORIZONTAL_PADDING, Math.round(ROW_HEIGHT / 2));
+    row.addChild(rankChip);
+
+    const name = new Text({
+      text: entry.name,
+      style: {
+        fontFamily: FONT_SANS,
+        fontSize: 14,
+        fontWeight: "500",
+        fill: COLORS.text,
+      },
+    });
+    name.anchor.set(0, 0.5);
+    name.position.set(HORIZONTAL_PADDING + 64, Math.round(ROW_HEIGHT / 2));
+    row.addChild(name);
+
+    let metricText: string;
+    let metricColor: number;
+    if (mode === "single") {
+      metricText = entry.bestMs != null ? formatMs(entry.bestMs) : "–";
+      metricColor = entry.bestMs != null ? COLORS.text : COLORS.textTertiary;
+    } else {
+      metricText = entry.wins.toString();
+      metricColor = COLORS.text;
     }
+
+    const metric = new Text({
+      text: metricText,
+      style: {
+        fontFamily: FONT_MONO,
+        fontSize: 14,
+        fill: metricColor,
+      },
+    });
+    metric.anchor.set(1, 0.5);
+    metric.position.set(CARD_WIDTH - HORIZONTAL_PADDING, Math.round(ROW_HEIGHT / 2));
+    row.addChild(metric);
+
+    return row;
+  }
+
+  private buildRankChip(rank: number): Container {
+    const chip = new Container();
+    const isPodium = rank <= 3;
+    const size = 24;
+
+    const bg = new Graphics();
+    bg.circle(0, 0, size / 2);
+    bg.fill(isPodium ? COLORS.warningBg : COLORS.surfaceMuted);
+    chip.addChild(bg);
+
+    const label = new Text({
+      text: rank.toString(),
+      style: {
+        fontFamily: FONT_MONO,
+        fontSize: 12,
+        fontWeight: "500",
+        fill: isPodium ? COLORS.gold : COLORS.textSecondary,
+      },
+    });
+    label.anchor.set(0.5);
+    chip.addChild(label);
+
+    return chip;
   }
 
   update(): void {
@@ -239,7 +358,7 @@ export class LeaderboardScene extends Container implements IScene {
   }
 
   resize(_width: number, _height: number): void {
-    // Simplified - would need to reposition elements
+    // Simplified — would need to reposition elements
   }
 
   destroy(): void {

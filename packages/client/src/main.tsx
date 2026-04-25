@@ -11,6 +11,10 @@ import { GameOverlay } from "./ui/react/GameOverlay";
     background: COLORS.background,
     resizeTo: window,
     antialias: true,
+    // Render at the device pixel ratio so Text rasterizes at native density
+    // (otherwise small labels look blurry on retina displays).
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
   });
 
   document.getElementById("pixi-container")!.appendChild(app.canvas);
