@@ -11,13 +11,19 @@
     "db:migrate:local": "wrangler d1 migrations apply differ --local",
     "db:migrate:remote": "wrangler d1 migrations apply differ --remote",
     "db:seed:local": "node --experimental-strip-types scripts/import-puzzles.ts --local",
-    "db:seed:remote": "node --experimental-strip-types scripts/import-puzzles.ts --remote"
+    "db:seed:remote": "node --experimental-strip-types scripts/import-puzzles.ts --remote",
+    "test:rl:smoke": "node --test --experimental-strip-types tests/rate-limit.smoke.test.ts",
+    "test:rl:k6": "k6 run tests/k6/rate-limit.js"
   },
   "dependencies": {
     "@differ/shared": "workspace:*",
     "@tsndr/cloudflare-worker-jwt": "^3.1.4",
+    "@zxcvbn-ts/core": "^3.0.4",
+    "@zxcvbn-ts/language-common": "^3.0.4",
+    "@zxcvbn-ts/language-en": "^3.0.2",
     "drizzle-orm": "^0.36.4",
     "hono": "^4.6.9",
+    "otpauth": "^9.5.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

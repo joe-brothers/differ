@@ -192,6 +192,84 @@ export class HtmlOverlay {
     return p;
   }
 
+  createHelperText(parent: HTMLElement): HTMLParagraphElement {
+    const p = document.createElement("p");
+    Object.assign(p.style, {
+      color: TOKENS.textSecondary,
+      fontFamily: FONT_FAMILY,
+      fontSize: "12px",
+      margin: "-4px 0 0 0",
+      minHeight: "16px",
+    });
+    parent.appendChild(p);
+    return p;
+  }
+
+  // Password strength meter — a 4-segment bar plus a label.
+  // Returns an `update(score, label)` API so callers can drive it from a
+  // zxcvbn result without touching DOM directly.
+  createStrengthMeter(parent: HTMLElement): {
+    update: (score: number, label: string) => void;
+    element: HTMLDivElement;
+  } {
+    const wrap = document.createElement("div");
+    Object.assign(wrap.style, {
+      display: "flex",
+      flexDirection: "column",
+      gap: "4px",
+      marginTop: "-4px",
+    });
+    const bar = document.createElement("div");
+    Object.assign(bar.style, {
+      display: "flex",
+      gap: "4px",
+      width: "100%",
+    });
+    const segments: HTMLDivElement[] = [];
+    for (let i = 0; i < 4; i++) {
+      const seg = document.createElement("div");
+      Object.assign(seg.style, {
+        flex: "1",
+        height: "4px",
+        backgroundColor: TOKENS.border,
+        borderRadius: "2px",
+        transition: "background-color 120ms ease-out",
+      });
+      bar.appendChild(seg);
+      segments.push(seg);
+    }
+    const label = document.createElement("span");
+    Object.assign(label.style, {
+      fontFamily: FONT_FAMILY,
+      fontSize: "12px",
+      color: TOKENS.textSecondary,
+      minHeight: "16px",
+    });
+    wrap.appendChild(bar);
+    wrap.appendChild(label);
+    parent.appendChild(wrap);
+
+    const COLORS_BY_SCORE: Record<number, string> = {
+      0: TOKENS.error,
+      1: TOKENS.error,
+      2: "#F9AB00",
+      3: "#1E8E3E",
+      4: "#188038",
+    };
+    return {
+      element: wrap,
+      update: (score, text) => {
+        const filled = score === 0 ? 0 : score; // score 1 → 1 segment, 4 → 4
+        const color = COLORS_BY_SCORE[score] ?? TOKENS.border;
+        segments.forEach((seg, i) => {
+          seg.style.backgroundColor = i < filled ? color : TOKENS.border;
+        });
+        label.textContent = text;
+        label.style.color = score >= 2 ? TOKENS.textSecondary : TOKENS.error;
+      },
+    };
+  }
+
   destroy(): void {
     this.container.remove();
   }

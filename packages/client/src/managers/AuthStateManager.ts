@@ -33,8 +33,24 @@ export class AuthStateManager extends EventEmitter {
     this.emit("authStateChanged");
   }
 
-  async login(username: string, password: string): Promise<void> {
+  // Login returns either the authenticated user (cookie set), or a TOTP
+  // challenge ticket. The caller drives the second-factor UI based on the
+  // tagged response.
+  async login(
+    username: string,
+    password: string,
+  ): Promise<{ kind: "ok"; user: PublicUser } | { kind: "totp"; ticket: string }> {
     const res = await authApi.login({ username, password });
+    if ("totpRequired" in res) {
+      return { kind: "totp", ticket: res.ticket };
+    }
+    this.user = res.user;
+    this.emit("authStateChanged");
+    return { kind: "ok", user: res.user };
+  }
+
+  async completeTotpLogin(ticket: string, code: string): Promise<void> {
+    const res = await authApi.loginTotp(ticket, code);
     this.user = res.user;
     this.emit("authStateChanged");
   }

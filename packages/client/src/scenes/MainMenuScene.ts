@@ -1,10 +1,12 @@
 import { Application, Container, Graphics, Text } from "pixi.js";
+import QRCode from "qrcode";
 import type { IScene } from "../types";
 import { COLORS } from "../constants";
 import { game } from "../core/Game";
 import { authState } from "../managers/AuthStateManager";
 import { HtmlOverlay } from "../ui/HtmlOverlay";
-import { ApiError } from "../network/rest";
+import { ApiError, authApi } from "../network/rest";
+import { evaluatePassword } from "../managers/passwordStrength";
 
 export class MainMenuScene extends Container implements IScene {
   private app: Application;
@@ -15,7 +17,9 @@ export class MainMenuScene extends Container implements IScene {
   private usernameText: Text | null = null;
   private logoutText: Text | null = null;
   private upgradeText: Text | null = null;
+  private settingsText: Text | null = null;
   private upgradeOverlay: HtmlOverlay | null = null;
+  private settingsOverlay: HtmlOverlay | null = null;
 
   constructor(app: Application) {
     super();
@@ -222,6 +226,31 @@ export class MainMenuScene extends Container implements IScene {
       nextY += 26;
     }
 
+    // Registered users get an "Account" link to manage 2FA + email.
+    if (!user.isGuest) {
+      this.settingsText = new Text({
+        text: "Account",
+        style: {
+          fontFamily: "Arial, sans-serif",
+          fontSize: 16,
+          fill: COLORS.primary,
+        },
+      });
+      this.settingsText.anchor.set(1, 0);
+      this.settingsText.position.set(this.app.screen.width - 20, nextY);
+      this.settingsText.eventMode = "static";
+      this.settingsText.cursor = "pointer";
+      this.settingsText.on("pointerover", () => {
+        if (this.settingsText) this.settingsText.style.fill = COLORS.primaryHover;
+      });
+      this.settingsText.on("pointerout", () => {
+        if (this.settingsText) this.settingsText.style.fill = COLORS.primary;
+      });
+      this.settingsText.on("pointerdown", () => this.openSettingsModal());
+      this.addChild(this.settingsText);
+      nextY += 26;
+    }
+
     this.logoutText = new Text({
       text: "Logout",
       style: {
@@ -283,10 +312,44 @@ export class MainMenuScene extends Container implements IScene {
       placeholder: "Password",
       name: "password",
     });
+    const meter = this.upgradeOverlay.createStrengthMeter(card);
+    const confirmInput = this.upgradeOverlay.createInput(card, {
+      type: "password",
+      placeholder: "Confirm password",
+      name: "passwordConfirm",
+    });
+    const matchHelper = this.upgradeOverlay.createHelperText(card);
 
     const errorText = this.upgradeOverlay.createErrorText(card);
     const submitBtn = this.upgradeOverlay.createButton(card, "Save");
     const cancelBtn = this.upgradeOverlay.createSecondaryButton(card, "Cancel");
+
+    const refreshStrength = () => {
+      const r = evaluatePassword(passwordInput.value, [usernameInput.value.trim()]);
+      const detail = r.warning || r.suggestion;
+      meter.update(
+        r.score,
+        passwordInput.value ? (detail ? `${r.label} — ${detail}` : r.label) : "",
+      );
+    };
+    const refreshMatch = () => {
+      if (!confirmInput.value) {
+        matchHelper.textContent = "";
+        return;
+      }
+      if (confirmInput.value !== passwordInput.value) {
+        matchHelper.style.color = "#D93025";
+        matchHelper.textContent = "Passwords do not match";
+      } else {
+        matchHelper.textContent = "";
+      }
+    };
+    passwordInput.addEventListener("input", () => {
+      refreshStrength();
+      refreshMatch();
+    });
+    usernameInput.addEventListener("input", refreshStrength);
+    confirmInput.addEventListener("input", refreshMatch);
 
     cancelBtn.addEventListener("click", () => {
       this.upgradeOverlay?.destroy();
@@ -298,6 +361,18 @@ export class MainMenuScene extends Container implements IScene {
       const password = passwordInput.value;
       if (!username || !password) {
         errorText.textContent = "Username and password are required.";
+        return;
+      }
+      if (confirmInput.value !== password) {
+        errorText.textContent = "Passwords do not match.";
+        return;
+      }
+      const strength = evaluatePassword(password, [username]);
+      if (!strength.passes) {
+        errorText.textContent =
+          strength.warning ||
+          strength.suggestion ||
+          "Password is too weak. Try a longer or less common one.";
         return;
       }
       submitBtn.disabled = true;
@@ -314,6 +389,9 @@ export class MainMenuScene extends Container implements IScene {
         if (err instanceof ApiError) {
           if (err.code === "username_taken") {
             errorText.textContent = "Username is already taken.";
+          } else if (err.code === "weak_password") {
+            errorText.textContent =
+              err.message || "Password is too weak. Try a longer or less common one.";
           } else {
             errorText.textContent = err.message || "Something went wrong.";
           }
@@ -330,7 +408,285 @@ export class MainMenuScene extends Container implements IScene {
     };
     usernameInput.addEventListener("keydown", onKeyDown);
     passwordInput.addEventListener("keydown", onKeyDown);
+    confirmInput.addEventListener("keydown", onKeyDown);
     usernameInput.focus();
+  }
+
+  // Account settings overlay: 2FA setup + email (mockup) for registered users.
+  // Built lazily — fetches current state when opened, no caching needed.
+  private async openSettingsModal(): Promise<void> {
+    this.settingsOverlay?.destroy();
+    this.settingsOverlay = new HtmlOverlay();
+    const card = this.settingsOverlay.createFormContainer();
+    Object.assign(card.style, { width: "420px", maxWidth: "92vw" });
+
+    const heading = document.createElement("h2");
+    heading.textContent = "Account";
+    Object.assign(heading.style, {
+      color: "#202124",
+      margin: "0 0 8px 0",
+      fontSize: "20px",
+      fontWeight: "500",
+      textAlign: "center",
+    });
+    card.appendChild(heading);
+
+    const status = document.createElement("p");
+    Object.assign(status.style, {
+      color: "#5F6368",
+      fontSize: "13px",
+      textAlign: "center",
+      margin: "0 0 8px 0",
+    });
+    status.textContent = "Loading…";
+    card.appendChild(status);
+
+    let totpEnabled = false;
+    let currentEmail: string | null = null;
+    try {
+      const [t, e] = await Promise.all([authApi.totpStatus(), authApi.getEmail()]);
+      totpEnabled = t.enabled;
+      currentEmail = e.email;
+      status.textContent = "";
+    } catch {
+      status.style.color = "#D93025";
+      status.textContent = "Could not load account state.";
+      return;
+    }
+
+    this.renderSettingsBody(card, totpEnabled, currentEmail);
+
+    const closeBtn = this.settingsOverlay.createSecondaryButton(card, "Close");
+    closeBtn.addEventListener("click", () => {
+      this.settingsOverlay?.destroy();
+      this.settingsOverlay = null;
+    });
+  }
+
+  // Re-renders the dynamic part (TOTP + email sections) so toggling state
+  // doesn't require destroying the whole overlay. The static "Close" button
+  // is appended once by the caller, after this returns.
+  private renderSettingsBody(
+    card: HTMLDivElement,
+    totpEnabled: boolean,
+    currentEmail: string | null,
+  ): void {
+    if (!this.settingsOverlay) return;
+    const overlay = this.settingsOverlay;
+
+    // Wipe any pre-existing dynamic section so re-renders stay clean.
+    const existing = card.querySelector('[data-section="dynamic"]');
+    existing?.remove();
+
+    const dyn = document.createElement("div");
+    dyn.dataset.section = "dynamic";
+    Object.assign(dyn.style, { display: "flex", flexDirection: "column", gap: "16px" });
+    card.insertBefore(dyn, card.lastElementChild); // before "Close"
+
+    // ---- 2FA section ----
+    const totpHeader = document.createElement("h3");
+    totpHeader.textContent = "Two-Factor Authentication";
+    Object.assign(totpHeader.style, {
+      margin: "0",
+      fontSize: "14px",
+      fontWeight: "500",
+      color: "#202124",
+    });
+    dyn.appendChild(totpHeader);
+
+    const totpBlurb = document.createElement("p");
+    totpBlurb.textContent = totpEnabled
+      ? "2FA is enabled. You'll need a code from your authenticator app to sign in."
+      : "Add a one-time code requirement using an authenticator app (Google Authenticator, 1Password, etc).";
+    Object.assign(totpBlurb.style, { color: "#5F6368", fontSize: "13px", margin: "0" });
+    dyn.appendChild(totpBlurb);
+
+    if (totpEnabled) {
+      const disableBtn = overlay.createSecondaryButton(dyn, "Disable 2FA");
+      const pwdInput = overlay.createInput(dyn, {
+        type: "password",
+        placeholder: "Confirm with current password",
+        name: "disable-pwd",
+      });
+      pwdInput.style.display = "none";
+      const errText = overlay.createErrorText(dyn);
+      let armed = false;
+      disableBtn.addEventListener("click", async () => {
+        if (!armed) {
+          armed = true;
+          pwdInput.style.display = "block";
+          disableBtn.textContent = "Confirm Disable";
+          pwdInput.focus();
+          return;
+        }
+        if (!pwdInput.value) {
+          errText.textContent = "Enter your password.";
+          return;
+        }
+        disableBtn.disabled = true;
+        try {
+          await authApi.totpDisable(pwdInput.value);
+          this.renderSettingsBody(card, false, currentEmail);
+        } catch (err) {
+          disableBtn.disabled = false;
+          if (err instanceof ApiError && err.code === "invalid_credentials") {
+            errText.textContent = "Wrong password.";
+          } else {
+            errText.textContent = "Could not disable 2FA.";
+          }
+        }
+      });
+    } else {
+      const enableBtn = overlay.createButton(dyn, "Enable 2FA");
+      enableBtn.addEventListener("click", () => this.startTotpEnrollment(card, currentEmail));
+    }
+
+    // ---- Email section ----
+    const emailHeader = document.createElement("h3");
+    emailHeader.textContent = "Recovery Email (mocked)";
+    Object.assign(emailHeader.style, {
+      margin: "0",
+      fontSize: "14px",
+      fontWeight: "500",
+      color: "#202124",
+    });
+    dyn.appendChild(emailHeader);
+
+    const emailBlurb = document.createElement("p");
+    emailBlurb.textContent = currentEmail
+      ? `Current: ${currentEmail}. (No email is actually sent yet.)`
+      : "Add an email so you can receive a password-reset link. (No email is actually sent yet.)";
+    Object.assign(emailBlurb.style, { color: "#5F6368", fontSize: "13px", margin: "0" });
+    dyn.appendChild(emailBlurb);
+
+    const emailInput = overlay.createInput(dyn, {
+      type: "email",
+      placeholder: "you@example.com",
+      name: "email",
+    });
+    if (currentEmail) emailInput.value = currentEmail;
+    const emailErr = overlay.createErrorText(dyn);
+    const saveEmailBtn = overlay.createButton(dyn, "Save Email");
+    saveEmailBtn.addEventListener("click", async () => {
+      const value = emailInput.value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        emailErr.style.color = "#D93025";
+        emailErr.textContent = "Enter a valid email.";
+        return;
+      }
+      saveEmailBtn.disabled = true;
+      try {
+        await authApi.setEmail(value);
+        emailErr.style.color = "#188038";
+        emailErr.textContent = "Saved. (Verification not implemented yet.)";
+        this.renderSettingsBody(card, totpEnabled, value);
+      } catch (err) {
+        emailErr.style.color = "#D93025";
+        if (err instanceof ApiError && err.code === "email_taken") {
+          emailErr.textContent = "Email already in use.";
+        } else {
+          emailErr.textContent = "Could not save email.";
+        }
+      } finally {
+        saveEmailBtn.disabled = false;
+      }
+    });
+  }
+
+  // Walks the user through TOTP enrollment: setup → show QR + secret → verify.
+  private async startTotpEnrollment(
+    card: HTMLDivElement,
+    currentEmail: string | null,
+  ): Promise<void> {
+    if (!this.settingsOverlay) return;
+    const overlay = this.settingsOverlay;
+    const dyn = card.querySelector<HTMLDivElement>('[data-section="dynamic"]');
+    if (!dyn) return;
+    dyn.innerHTML = "";
+
+    const heading = document.createElement("h3");
+    heading.textContent = "Set up 2FA";
+    Object.assign(heading.style, { margin: "0", fontSize: "14px", fontWeight: "500" });
+    dyn.appendChild(heading);
+
+    const blurb = document.createElement("p");
+    blurb.textContent =
+      "Scan the QR code with your authenticator app, then enter the 6-digit code below.";
+    Object.assign(blurb.style, { color: "#5F6368", fontSize: "13px", margin: "0" });
+    dyn.appendChild(blurb);
+
+    let setup: { secret: string; otpauthUrl: string };
+    try {
+      setup = await authApi.totpSetup();
+    } catch (err) {
+      const msg = document.createElement("p");
+      Object.assign(msg.style, { color: "#D93025", fontSize: "13px", margin: "0" });
+      msg.textContent = err instanceof ApiError ? err.message : "Could not start setup.";
+      dyn.appendChild(msg);
+      return;
+    }
+
+    const qrCanvas = document.createElement("canvas");
+    Object.assign(qrCanvas.style, { alignSelf: "center" });
+    dyn.appendChild(qrCanvas);
+    try {
+      await QRCode.toCanvas(qrCanvas, setup.otpauthUrl, { width: 180, margin: 1 });
+    } catch {
+      qrCanvas.remove();
+    }
+
+    const secretLine = document.createElement("p");
+    Object.assign(secretLine.style, {
+      color: "#5F6368",
+      fontSize: "12px",
+      fontFamily: "ui-monospace, monospace",
+      margin: "0",
+      wordBreak: "break-all",
+      textAlign: "center",
+    });
+    secretLine.textContent = `Manual entry: ${setup.secret}`;
+    dyn.appendChild(secretLine);
+
+    const codeInput = overlay.createInput(dyn, {
+      type: "text",
+      placeholder: "6-digit code",
+      name: "totp-verify",
+    });
+    codeInput.inputMode = "numeric";
+    codeInput.maxLength = 6;
+
+    const errText = overlay.createErrorText(dyn);
+    const verifyBtn = overlay.createButton(dyn, "Verify & Enable");
+    const cancelBtn = overlay.createSecondaryButton(dyn, "Cancel");
+
+    cancelBtn.addEventListener("click", () => {
+      this.renderSettingsBody(card, false, currentEmail);
+    });
+
+    const submit = async () => {
+      const code = codeInput.value.trim();
+      if (!/^\d{6}$/.test(code)) {
+        errText.textContent = "Enter the 6-digit code.";
+        return;
+      }
+      verifyBtn.disabled = true;
+      try {
+        await authApi.totpVerify(code);
+        this.renderSettingsBody(card, true, currentEmail);
+      } catch (err) {
+        verifyBtn.disabled = false;
+        if (err instanceof ApiError && err.code === "invalid_totp") {
+          errText.textContent = "Invalid code. Try again.";
+        } else {
+          errText.textContent = "Could not verify.";
+        }
+      }
+    };
+    verifyBtn.addEventListener("click", submit);
+    codeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submit();
+    });
+    codeInput.focus();
   }
 
   update(): void {
@@ -353,17 +709,25 @@ export class MainMenuScene extends Container implements IScene {
     if (this.usernameText) {
       this.usernameText.position.set(width - 20, 20);
     }
+    let y = 46;
     if (this.upgradeText) {
-      this.upgradeText.position.set(width - 20, 46);
+      this.upgradeText.position.set(width - 20, y);
+      y += 26;
+    }
+    if (this.settingsText) {
+      this.settingsText.position.set(width - 20, y);
+      y += 26;
     }
     if (this.logoutText) {
-      this.logoutText.position.set(width - 20, this.upgradeText ? 72 : 46);
+      this.logoutText.position.set(width - 20, y);
     }
   }
 
   destroy(): void {
     this.upgradeOverlay?.destroy();
     this.upgradeOverlay = null;
+    this.settingsOverlay?.destroy();
+    this.settingsOverlay = null;
     this.removeAllListeners();
     super.destroy({ children: true });
   }

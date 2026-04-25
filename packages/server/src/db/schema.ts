@@ -11,6 +11,8 @@ export const users = sqliteTable(
     email: text("email").unique(),
     isGuest: integer("is_guest").notNull().default(1),
     deviceId: text("device_id"),
+    totpSecret: text("totp_secret"),
+    totpEnabled: integer("totp_enabled").notNull().default(0),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(datetime('now'))`),

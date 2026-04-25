@@ -3,16 +3,18 @@ import type { IScene } from "../types";
 import { COLORS } from "../constants";
 import { HtmlOverlay } from "../ui/HtmlOverlay";
 import { authState } from "../managers/AuthStateManager";
-import { ApiError } from "../network/rest";
+import { ApiError, authApi } from "../network/rest";
 import { game } from "../core/Game";
+import { evaluatePassword } from "../managers/passwordStrength";
 
-type AuthView = "chooser" | "signin" | "signup";
+type AuthView = "chooser" | "signin" | "signup" | "totp" | "forgot";
 
 export class AuthScene extends Container implements IScene {
   private app: Application;
   private overlay: HtmlOverlay | null = null;
   private title: Text | null = null;
   private view: AuthView = "chooser";
+  private totpTicket: string | null = null;
 
   constructor(app: Application) {
     super();
@@ -47,6 +49,8 @@ export class AuthScene extends Container implements IScene {
 
   private render(): void {
     if (this.view === "chooser") this.renderChooser();
+    else if (this.view === "totp") this.renderTotpForm();
+    else if (this.view === "forgot") this.renderForgotForm();
     else this.renderCredentialsForm();
   }
 
@@ -122,14 +126,85 @@ export class AuthScene extends Container implements IScene {
       name: "password",
     });
 
+    let strengthMeter: ReturnType<HtmlOverlay["createStrengthMeter"]> | null = null;
+    let confirmInput: HTMLInputElement | null = null;
+    let confirmHelper: HTMLParagraphElement | null = null;
+    if (isSignUp) {
+      strengthMeter = this.overlay.createStrengthMeter(card);
+      confirmInput = this.overlay.createInput(card, {
+        type: "password",
+        placeholder: "Confirm password",
+        name: "passwordConfirm",
+      });
+      confirmHelper = this.overlay.createHelperText(card);
+    }
+
     const errorText = this.overlay.createErrorText(card);
     const submitBtn = this.overlay.createButton(card, isSignUp ? "Create" : "Sign In");
     const backBtn = this.overlay.createSecondaryButton(card, "Back");
+
+    if (!isSignUp) {
+      const forgot = document.createElement("a");
+      forgot.textContent = "Forgot password?";
+      forgot.href = "#";
+      Object.assign(forgot.style, {
+        color: "#1A73E8",
+        fontFamily: "inherit",
+        fontSize: "12px",
+        textAlign: "center",
+        textDecoration: "none",
+        margin: "4px 0 0 0",
+        cursor: "pointer",
+      });
+      forgot.addEventListener("click", (e) => {
+        e.preventDefault();
+        this.view = "forgot";
+        this.render();
+      });
+      card.appendChild(forgot);
+    }
 
     backBtn.addEventListener("click", () => {
       this.view = "chooser";
       this.render();
     });
+
+    const recomputeStrength = () => {
+      if (!strengthMeter) return;
+      const pwd = passwordInput.value;
+      const username = usernameInput.value.trim();
+      if (!pwd) {
+        strengthMeter.update(0, "");
+        return;
+      }
+      const r = evaluatePassword(pwd, username ? [username] : []);
+      const detail = r.warning || r.suggestion;
+      strengthMeter.update(r.score, detail ? `${r.label} — ${detail}` : r.label);
+    };
+
+    const recomputeConfirm = () => {
+      if (!confirmInput || !confirmHelper) return;
+      if (!confirmInput.value) {
+        confirmHelper.textContent = "";
+        confirmHelper.style.color = "#5F6368";
+        return;
+      }
+      if (confirmInput.value !== passwordInput.value) {
+        confirmHelper.textContent = "Passwords do not match";
+        confirmHelper.style.color = "#D93025";
+      } else {
+        confirmHelper.textContent = "";
+      }
+    };
+
+    if (isSignUp) {
+      passwordInput.addEventListener("input", () => {
+        recomputeStrength();
+        recomputeConfirm();
+      });
+      usernameInput.addEventListener("input", recomputeStrength);
+      confirmInput?.addEventListener("input", recomputeConfirm);
+    }
 
     const submit = async () => {
       const username = usernameInput.value.trim();
@@ -137,6 +212,20 @@ export class AuthScene extends Container implements IScene {
       if (!username || !password) {
         errorText.textContent = "Username and password are required.";
         return;
+      }
+      if (isSignUp) {
+        if (confirmInput && confirmInput.value !== password) {
+          errorText.textContent = "Passwords do not match.";
+          return;
+        }
+        const strength = evaluatePassword(password, [username]);
+        if (!strength.passes) {
+          errorText.textContent =
+            strength.warning ||
+            strength.suggestion ||
+            "Password is too weak. Try a longer or less common one.";
+          return;
+        }
       }
       submitBtn.disabled = true;
       submitBtn.textContent = "Loading...";
@@ -148,16 +237,26 @@ export class AuthScene extends Container implements IScene {
             await authState.createGuest();
           }
           await authState.upgrade(username, password);
+          game.showMainMenu();
         } else {
-          await authState.login(username, password);
+          const result = await authState.login(username, password);
+          if (result.kind === "totp") {
+            this.totpTicket = result.ticket;
+            this.view = "totp";
+            this.render();
+            return;
+          }
+          game.showMainMenu();
         }
-        game.showMainMenu();
       } catch (err) {
         if (err instanceof ApiError) {
           if (err.code === "username_taken") {
             errorText.textContent = "Username is already taken.";
           } else if (err.code === "invalid_credentials") {
             errorText.textContent = "Invalid username or password.";
+          } else if (err.code === "weak_password") {
+            errorText.textContent =
+              err.message || "Password is too weak. Try a longer or less common one.";
           } else {
             errorText.textContent = err.message || "Something went wrong.";
           }
@@ -175,8 +274,165 @@ export class AuthScene extends Container implements IScene {
     };
     usernameInput.addEventListener("keydown", onKeyDown);
     passwordInput.addEventListener("keydown", onKeyDown);
+    confirmInput?.addEventListener("keydown", onKeyDown);
 
     usernameInput.focus();
+  }
+
+  private renderTotpForm(): void {
+    const card = this.resetOverlay();
+    if (!card || !this.overlay) return;
+
+    const heading = document.createElement("h2");
+    heading.textContent = "Two-Factor Code";
+    Object.assign(heading.style, {
+      color: "#202124",
+      margin: "0 0 8px 0",
+      fontSize: "22px",
+      fontWeight: "500",
+      textAlign: "center",
+    });
+    card.appendChild(heading);
+
+    const blurb = document.createElement("p");
+    blurb.textContent = "Enter the 6-digit code from your authenticator app.";
+    Object.assign(blurb.style, {
+      color: "#5F6368",
+      fontSize: "13px",
+      textAlign: "center",
+      margin: "0 0 12px 0",
+    });
+    card.appendChild(blurb);
+
+    const codeInput = this.overlay.createInput(card, {
+      type: "text",
+      placeholder: "123456",
+      name: "totp",
+    });
+    codeInput.inputMode = "numeric";
+    codeInput.autocomplete = "one-time-code";
+    codeInput.maxLength = 6;
+
+    const errorText = this.overlay.createErrorText(card);
+    const submitBtn = this.overlay.createButton(card, "Verify");
+    const backBtn = this.overlay.createSecondaryButton(card, "Back");
+
+    backBtn.addEventListener("click", () => {
+      this.totpTicket = null;
+      this.view = "signin";
+      this.render();
+    });
+
+    const submit = async () => {
+      const code = codeInput.value.trim();
+      if (!/^\d{6}$/.test(code)) {
+        errorText.textContent = "Code must be 6 digits.";
+        return;
+      }
+      if (!this.totpTicket) {
+        errorText.textContent = "Session expired. Sign in again.";
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Verifying...";
+      errorText.textContent = "";
+      try {
+        await authState.completeTotpLogin(this.totpTicket, code);
+        this.totpTicket = null;
+        game.showMainMenu();
+      } catch (err) {
+        if (err instanceof ApiError) {
+          if (err.code === "invalid_totp") {
+            errorText.textContent = "Invalid code. Try again.";
+          } else if (err.code === "ticket_invalid") {
+            errorText.textContent = "Login session expired. Sign in again.";
+            this.totpTicket = null;
+          } else {
+            errorText.textContent = err.message || "Something went wrong.";
+          }
+        } else {
+          errorText.textContent = "Network error. Try again.";
+        }
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Verify";
+      }
+    };
+    submitBtn.addEventListener("click", submit);
+    codeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submit();
+    });
+    codeInput.focus();
+  }
+
+  private renderForgotForm(): void {
+    const card = this.resetOverlay();
+    if (!card || !this.overlay) return;
+
+    const heading = document.createElement("h2");
+    heading.textContent = "Reset Password";
+    Object.assign(heading.style, {
+      color: "#202124",
+      margin: "0 0 8px 0",
+      fontSize: "22px",
+      fontWeight: "500",
+      textAlign: "center",
+    });
+    card.appendChild(heading);
+
+    const blurb = document.createElement("p");
+    blurb.textContent =
+      "Enter your username or email. If a matching account exists, we'll send a reset link. (Email delivery is mocked for now.)";
+    Object.assign(blurb.style, {
+      color: "#5F6368",
+      fontSize: "13px",
+      textAlign: "center",
+      margin: "0 0 12px 0",
+    });
+    card.appendChild(blurb);
+
+    const idInput = this.overlay.createInput(card, {
+      type: "text",
+      placeholder: "Username or email",
+      name: "identifier",
+    });
+
+    const status = this.overlay.createErrorText(card);
+    const submitBtn = this.overlay.createButton(card, "Send Reset Link");
+    const backBtn = this.overlay.createSecondaryButton(card, "Back");
+
+    backBtn.addEventListener("click", () => {
+      this.view = "signin";
+      this.render();
+    });
+
+    const submit = async () => {
+      const value = idInput.value.trim();
+      if (!value) {
+        status.style.color = "#D93025";
+        status.textContent = "Enter a username or email.";
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Sending...";
+      try {
+        const isEmail = value.includes("@");
+        await authApi.forgotPassword(isEmail ? { email: value } : { username: value });
+        status.style.color = "#188038";
+        status.textContent = "If an account matches, you'll receive an email shortly.";
+      } catch {
+        // Mocked endpoint always succeeds; treat any failure as transient.
+        status.style.color = "#188038";
+        status.textContent = "If an account matches, you'll receive an email shortly.";
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Send Reset Link";
+      }
+    };
+    submitBtn.addEventListener("click", submit);
+    idInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submit();
+    });
+    idInput.focus();
   }
 
   update(): void {

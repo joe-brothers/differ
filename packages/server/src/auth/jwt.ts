@@ -30,3 +30,44 @@ export async function verifyToken(secret: string, token: string): Promise<JwtCla
     return null;
   }
 }
+
+// Short-lived ticket used between the password-OK step and the TOTP-OK step
+// of login. Encodes only the userId; verifying the code is a separate step.
+const TOTP_TICKET_TTL_SEC = 5 * 60;
+
+interface TotpTicketClaims {
+  sub: string;
+  purpose: "totp_pending";
+  iat: number;
+  exp: number;
+  iss: string;
+}
+
+export async function signTotpTicket(
+  secret: string,
+  issuer: string,
+  userId: string,
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const claims: TotpTicketClaims = {
+    sub: userId,
+    purpose: "totp_pending",
+    iat: now,
+    exp: now + TOTP_TICKET_TTL_SEC,
+    iss: issuer,
+  };
+  return jwt.sign(claims, secret);
+}
+
+export async function verifyTotpTicket(secret: string, token: string): Promise<string | null> {
+  try {
+    const ok = await jwt.verify(token, secret);
+    if (!ok) return null;
+    const decoded = jwt.decode<TotpTicketClaims>(token);
+    const claims = decoded.payload;
+    if (!claims || claims.purpose !== "totp_pending") return null;
+    return claims.sub;
+  } catch {
+    return null;
+  }
+}

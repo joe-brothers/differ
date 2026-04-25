@@ -4,7 +4,10 @@ import type {
   CreateRoomRes,
   LeaderboardRes,
   LoginReq,
+  LoginTotpRequiredRes,
   PublicUser,
+  TotpSetupRes,
+  TotpStatusRes,
   UpgradeReq,
 } from "@differ/shared";
 import { API_BASE_URL } from "../constants";
@@ -48,12 +51,20 @@ async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   return json as T;
 }
 
+export type LoginResponse = AuthRes | LoginTotpRequiredRes;
+
 export const authApi = {
   guest(): Promise<AuthRes> {
     return request<AuthRes>("/auth/guest", { method: "POST" });
   },
-  login(req: LoginReq): Promise<AuthRes> {
-    return request<AuthRes>("/auth/login", { method: "POST", body: req });
+  login(req: LoginReq): Promise<LoginResponse> {
+    return request<LoginResponse>("/auth/login", { method: "POST", body: req });
+  },
+  loginTotp(ticket: string, code: string): Promise<AuthRes> {
+    return request<AuthRes>("/auth/login/totp", {
+      method: "POST",
+      body: { ticket, code },
+    });
   },
   upgrade(req: UpgradeReq): Promise<AuthRes> {
     return request<AuthRes>("/auth/upgrade", { method: "POST", body: req });
@@ -63,6 +74,39 @@ export const authApi = {
   },
   logout(): Promise<{ ok: true }> {
     return request<{ ok: true }>("/auth/logout", { method: "POST" });
+  },
+  forgotPassword(payload: { username?: string; email?: string }): Promise<{ ok: true }> {
+    return request<{ ok: true }>("/auth/forgot-password", {
+      method: "POST",
+      body: payload,
+    });
+  },
+  totpStatus(): Promise<TotpStatusRes> {
+    return request<TotpStatusRes>("/auth/totp/status");
+  },
+  totpSetup(): Promise<TotpSetupRes> {
+    return request<TotpSetupRes>("/auth/totp/setup", { method: "POST" });
+  },
+  totpVerify(code: string): Promise<{ ok: true; enabled: boolean }> {
+    return request<{ ok: true; enabled: boolean }>("/auth/totp/verify", {
+      method: "POST",
+      body: { code },
+    });
+  },
+  totpDisable(password: string): Promise<{ ok: true; enabled: boolean }> {
+    return request<{ ok: true; enabled: boolean }>("/auth/totp/disable", {
+      method: "POST",
+      body: { password },
+    });
+  },
+  getEmail(): Promise<{ email: string | null }> {
+    return request<{ email: string | null }>("/auth/email");
+  },
+  setEmail(email: string): Promise<{ ok: true; email: string; mocked: boolean }> {
+    return request<{ ok: true; email: string; mocked: boolean }>("/auth/email", {
+      method: "POST",
+      body: { email },
+    });
   },
 };
 
