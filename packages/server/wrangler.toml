@@ -68,6 +68,9 @@ enabled = true
 name = "differ-server"
 routes = [{ pattern = "api.differ.joe-brothers.com", custom_domain = true }]
 
+[env.production.placement]
+region = "aws:ap-northeast-2"
+
 [env.production.vars]
 JWT_ISSUER = "differ"
 CDN_BASE = "https://differ-assets.joe-brothers.com"
