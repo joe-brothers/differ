@@ -1,5 +1,7 @@
 # differ
 
+[![CI](https://github.com/joe-brothers/differ/actions/workflows/ci.yml/badge.svg)](https://github.com/joe-brothers/differ/actions/workflows/ci.yml)
+
 Spot-the-Difference multiplayer game.
 
 - `packages/shared` — Zod schemas shared between server and client.
