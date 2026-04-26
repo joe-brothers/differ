@@ -30,6 +30,7 @@ jobs:
           node-version: 25
           cache: pnpm
 
+      - run: pnpm audit
       - run: pnpm install
       - run: pnpm lint
       - run: pnpm format:check

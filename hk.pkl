@@ -30,12 +30,18 @@ local oxfmt = new Step {
   fix = "pnpm exec oxfmt --write --no-error-on-unmatched-pattern {{ files }}"
 }
 
+local pnpmAudit = new Step {
+  glob = List("pnpm-lock.yaml")
+  check = "pnpm audit --audit-level low"
+}
+
 local allSteps = new Mapping<String, Step> {
   ["oxfmt"] = oxfmt
   ["oxlint"] = (Builtins.ox_lint) {
     check = "pnpm exec oxlint {{ files }}"
     fix = "pnpm exec oxlint --fix {{ files }}"
   }
+  ["pnpm-audit"] = pnpmAudit
 }
 
 hooks {
