@@ -14,7 +14,7 @@ import type { Env } from "../env.js";
 import { getDb } from "../db/client.js";
 import { gameResults, users } from "../db/schema.js";
 import { signToken, signTotpTicket, verifyTotpTicket } from "./jwt.js";
-import { hashPassword, verifyPassword } from "./password.js";
+import { hashPassword, verifyPassword, needsRehash } from "./password.js";
 import { requireAuth, type AuthEnv } from "./middleware.js";
 import { checkRateLimit, guestKey, loginKey, upgradeKey } from "./rate-limit.js";
 import { setTokenCookie, clearTokenCookie, setDeviceCookie, readDeviceCookie } from "./cookie.js";
@@ -129,6 +129,16 @@ authRoutes.post("/login", async (c) => {
   const ok = await verifyPassword(password, row.passwordHash);
   if (!ok) {
     return c.json({ error: { code: "invalid_credentials", message: "Invalid credentials" } }, 401);
+  }
+  // Transparent hash upgrade for legacy (pbkdf2) users. Best-effort:
+  // a write failure shouldn't block the login.
+  if (needsRehash(row.passwordHash)) {
+    try {
+      const fresh = await hashPassword(password);
+      await db.update(users).set({ passwordHash: fresh }).where(eq(users.id, row.id)).run();
+    } catch {
+      // swallow; user can be rehashed on a later login
+    }
   }
   if (row.totpEnabled === 1) {
     // Defer cookie issuance until the second-factor step succeeds.
@@ -379,11 +389,18 @@ protectedRoutes.post("/totp/disable", async (c) => {
   if (!okPwd) {
     return c.json({ error: { code: "invalid_credentials", message: "Invalid credentials" } }, 401);
   }
-  await db
-    .update(users)
-    .set({ totpSecret: null, totpEnabled: 0 })
-    .where(eq(users.id, claims.sub))
-    .run();
+  const updates: { totpSecret: null; totpEnabled: 0; passwordHash?: string } = {
+    totpSecret: null,
+    totpEnabled: 0,
+  };
+  if (needsRehash(row.passwordHash)) {
+    try {
+      updates.passwordHash = await hashPassword(parsed.data.password);
+    } catch {
+      // swallow; rehash can happen on a later verify
+    }
+  }
+  await db.update(users).set(updates).where(eq(users.id, claims.sub)).run();
   return c.json({ ok: true, enabled: false });
 });
 

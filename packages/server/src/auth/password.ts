@@ -1,14 +1,21 @@
-// PBKDF2-SHA256 password hashing using Web Crypto (Workers compatible).
-// Stored format: `pbkdf2$<iterations>$<saltB64>$<hashB64>`.
+// Password hashing. Argon2id is the current scheme; PBKDF2-SHA256 is kept
+// for verifying legacy hashes so existing users can sign in and get rehashed
+// transparently on next login (see needsRehash).
+//
+// Argon2id stored format: PHC standard, e.g.
+//   `$argon2id$v=19$m=19456,t=2,p=1$<saltB64>$<hashB64>`
+// Legacy PBKDF2 stored format: `pbkdf2$<iterations>$<saltB64>$<hashB64>`.
 
-const ITERATIONS = 100_000;
-const KEY_LEN_BITS = 256;
+import { argon2id, argon2Verify } from "hash-wasm";
 
-function b64enc(bytes: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
-  return btoa(bin);
-}
+// OWASP 2024 minimum for argon2id: m=19 MiB, t=2, p=1.
+const ARGON2_MEMORY_KIB = 19_456;
+const ARGON2_ITERATIONS = 2;
+const ARGON2_PARALLELISM = 1;
+const ARGON2_HASH_LEN = 32;
+const ARGON2_SALT_LEN = 16;
+
+const PBKDF2_KEY_LEN_BITS = 256;
 
 function b64dec(s: string): Uint8Array {
   const bin = atob(s);
@@ -28,18 +35,43 @@ async function pbkdf2(password: string, salt: Uint8Array, iterations: number): P
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
     key,
-    KEY_LEN_BITS,
+    PBKDF2_KEY_LEN_BITS,
   );
   return new Uint8Array(bits);
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await pbkdf2(password, salt, ITERATIONS);
-  return `pbkdf2$${ITERATIONS}$${b64enc(salt)}$${b64enc(hash)}`;
+  const salt = crypto.getRandomValues(new Uint8Array(ARGON2_SALT_LEN));
+  return argon2id({
+    password,
+    salt,
+    parallelism: ARGON2_PARALLELISM,
+    iterations: ARGON2_ITERATIONS,
+    memorySize: ARGON2_MEMORY_KIB,
+    hashLength: ARGON2_HASH_LEN,
+    outputType: "encoded",
+  });
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  if (
+    stored.startsWith("$argon2id$") ||
+    stored.startsWith("$argon2i$") ||
+    stored.startsWith("$argon2d$")
+  ) {
+    try {
+      return await argon2Verify({ password, hash: stored });
+    } catch {
+      return false;
+    }
+  }
+  if (stored.startsWith("pbkdf2$")) {
+    return verifyPbkdf2(password, stored);
+  }
+  return false;
+}
+
+async function verifyPbkdf2(password: string, stored: string): Promise<boolean> {
   const parts = stored.split("$");
   if (parts.length !== 4 || parts[0] !== "pbkdf2") return false;
   const iter = Number(parts[1]);
@@ -51,4 +83,10 @@ export async function verifyPassword(password: string, stored: string): Promise<
   let diff = 0;
   for (let i = 0; i < actual.length; i++) diff |= actual[i]! ^ expected[i]!;
   return diff === 0;
+}
+
+// True if the stored hash uses an older scheme and should be re-hashed
+// after a successful verify.
+export function needsRehash(stored: string): boolean {
+  return !stored.startsWith("$argon2id$");
 }
