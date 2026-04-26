@@ -2,10 +2,24 @@ import type { GameMode } from "@differ/shared";
 import type { Env } from "../env.js";
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1
+const CODE_LENGTH = 6;
+
 function genRoomCode(): string {
+  // Rejection sampling: discard bytes in the tail that wouldn't divide
+  // evenly across the alphabet, so each character has equal probability.
+  // For the current 32-char alphabet this never rejects (256 % 32 === 0),
+  // but the structure keeps it unbiased if the alphabet ever changes.
+  const n = CODE_ALPHABET.length;
+  const limit = 256 - (256 % n);
   let out = "";
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  for (let i = 0; i < 6; i++) out += CODE_ALPHABET[bytes[i]! % CODE_ALPHABET.length];
+  while (out.length < CODE_LENGTH) {
+    const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH));
+    for (const b of bytes) {
+      if (b >= limit) continue;
+      out += CODE_ALPHABET[b % n];
+      if (out.length === CODE_LENGTH) break;
+    }
+  }
   return out;
 }
 
