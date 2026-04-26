@@ -1,6 +1,8 @@
 packages:
   - packages/*
 
+blockExoticSubdeps: true
+
 minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
