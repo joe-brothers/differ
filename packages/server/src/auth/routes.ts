@@ -217,15 +217,20 @@ protectedRoutes.get("/me", async (c) => {
   }
   // Wins = number of 1v1 victories. Single-mode completions are still
   // persisted (for the fastest-time leaderboard) but don't count as wins.
-  // Guest rows are never inserted (see GameRoom.endGame), so guests read 0.
-  const winsRow = await db
-    .select({ c: sql<number>`COUNT(*)` })
-    .from(gameResults)
-    .where(and(eq(gameResults.userId, claims.sub), eq(gameResults.mode, "1v1")))
-    .get();
+  // Guests read 0 even though their rows exist — past plays only surface
+  // after upgrade flips isGuest to 0.
+  let wins = 0;
+  if (row.isGuest === 0) {
+    const winsRow = await db
+      .select({ c: sql<number>`COUNT(*)` })
+      .from(gameResults)
+      .where(and(eq(gameResults.userId, claims.sub), eq(gameResults.mode, "1v1")))
+      .get();
+    wins = winsRow?.c ?? 0;
+  }
   return c.json({
     user: { userId: row.id, name: row.name, isGuest: row.isGuest === 1 },
-    wins: winsRow?.c ?? 0,
+    wins,
   });
 });
 

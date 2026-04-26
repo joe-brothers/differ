@@ -490,19 +490,11 @@ export class GameRoom implements DurableObject {
         }
       }
       if (rows.length > 0) {
-        // Skip guest accounts: leaderboard is for registered players only,
-        // otherwise throwaway guest names spam the rankings.
+        // Guest rows are inserted too; the leaderboard / wins / opponent-stat
+        // queries filter on users.isGuest=0 at read time. This way a guest
+        // who upgrades inherits their prior plays automatically.
         const db = getDb(this.env.DB);
-        const candidateIds = rows.map((r) => r.userId);
-        const allowed = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(and(inArray(users.id, candidateIds), eq(users.isGuest, 0)));
-        const allowedSet = new Set(allowed.map((u) => u.id));
-        const persistRows = rows.filter((r) => allowedSet.has(r.userId));
-        if (persistRows.length > 0) {
-          await db.insert(gameResults).values(persistRows).run();
-        }
+        await db.insert(gameResults).values(rows).run();
       }
     }
 
@@ -621,7 +613,14 @@ export class GameRoom implements DurableObject {
     const rows = await db
       .select({ userId: gameResults.userId, c: sql<number>`COUNT(*)` })
       .from(gameResults)
-      .where(and(eq(gameResults.mode, "1v1"), inArray(gameResults.userId, userIds)))
+      .innerJoin(users, eq(users.id, gameResults.userId))
+      .where(
+        and(
+          eq(gameResults.mode, "1v1"),
+          inArray(gameResults.userId, userIds),
+          eq(users.isGuest, 0),
+        ),
+      )
       .groupBy(gameResults.userId)
       .all();
     for (const r of rows) out.set(r.userId, Number(r.c) || 0);

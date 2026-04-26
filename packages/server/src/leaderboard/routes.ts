@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { asc, count, desc, eq, min } from "drizzle-orm";
+import { and, asc, count, desc, eq, min } from "drizzle-orm";
 import { LeaderboardQuery, type LeaderboardRes } from "@differ/shared";
 import type { Env } from "../env.js";
 import { getDb } from "../db/client.js";
@@ -37,7 +37,9 @@ leaderboardRoutes.get("/", async (c) => {
     })
     .from(gameResults)
     .innerJoin(users, eq(users.id, gameResults.userId))
-    .where(eq(gameResults.mode, mode))
+    // Guests are excluded from the leaderboard. Their rows are still
+    // persisted so they survive an account upgrade.
+    .where(and(eq(gameResults.mode, mode), eq(users.isGuest, 0)))
     .groupBy(users.id, users.name)
     .orderBy(...orderBy)
     .limit(limit)
