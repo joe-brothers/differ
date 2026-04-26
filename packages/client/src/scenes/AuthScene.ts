@@ -1,4 +1,4 @@
-import { Application, Container, Text } from "pixi.js";
+import { Application, Assets, Container, Sprite, Text } from "pixi.js";
 import type { IScene } from "../types";
 import { COLORS } from "../constants";
 import { HtmlOverlay } from "../ui/HtmlOverlay";
@@ -14,6 +14,7 @@ export class AuthScene extends Container implements IScene {
   private app: Application;
   private overlay: HtmlOverlay | null = null;
   private title: Text | null = null;
+  private logo: Sprite | null = null;
   private betaBadge: Container | null = null;
   private view: AuthView = "chooser";
   private totpTicket: string | null = null;
@@ -45,6 +46,17 @@ export class AuthScene extends Container implements IScene {
     this.addChild(this.betaBadge);
 
     this.positionTitle();
+    void this.loadLogo();
+  }
+
+  private async loadLogo(): Promise<void> {
+    const texture = await Assets.load("/assets/differ.webp");
+    if (this.destroyed) return;
+    this.logo = new Sprite(texture);
+    this.logo.anchor.set(0.5);
+    this.logo.scale.set(96 / this.logo.height);
+    this.addChild(this.logo);
+    this.positionTitle();
   }
 
   private positionTitle(): void {
@@ -52,6 +64,12 @@ export class AuthScene extends Container implements IScene {
     this.title.position.set(this.app.screen.width / 2, this.app.screen.height * 0.15);
     if (this.betaBadge) {
       this.betaBadge.position.set(this.title.x + this.title.width / 2 + 8, this.title.y);
+    }
+    if (this.logo) {
+      this.logo.position.set(
+        this.title.x - this.title.width / 2 - 16 - this.logo.width / 2,
+        this.title.y,
+      );
     }
   }
 
