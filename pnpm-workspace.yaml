@@ -3,6 +3,18 @@ packages:
 
 minimumReleaseAge: 10080
 
+minimumReleaseAgeExclude:
+  - wrangler
+  - miniflare
+  - workerd
+  - "@cloudflare/workers-types"
+  - "@cloudflare/unenv-preset"
+  - "@cloudflare/workerd-darwin-64"
+  - "@cloudflare/workerd-darwin-arm64"
+  - "@cloudflare/workerd-linux-64"
+  - "@cloudflare/workerd-linux-arm64"
+  - "@cloudflare/workerd-windows-64"
+
 onlyBuiltDependencies:
   - esbuild
   - sharp

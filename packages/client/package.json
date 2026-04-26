@@ -12,25 +12,25 @@
   },
   "dependencies": {
     "@differ/shared": "workspace:*",
-    "@types/qrcode": "^1.5.6",
-    "@zxcvbn-ts/core": "^3.0.4",
-    "@zxcvbn-ts/language-common": "^3.0.4",
-    "@zxcvbn-ts/language-en": "^3.0.2",
-    "canvas-confetti": "^1.9.4",
-    "es-toolkit": "^1.43.0",
-    "pixi.js": "^8.15.0",
-    "qrcode": "^1.5.4",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "zod": "^3.23.8",
-    "zustand": "^5.0.12"
+    "@types/qrcode": "1.5.6",
+    "@zxcvbn-ts/core": "3.0.4",
+    "@zxcvbn-ts/language-common": "3.0.4",
+    "@zxcvbn-ts/language-en": "3.0.2",
+    "canvas-confetti": "1.9.4",
+    "es-toolkit": "1.45.1",
+    "pixi.js": "8.18.1",
+    "qrcode": "1.5.4",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "zod": "3.25.76",
+    "zustand": "5.0.12"
   },
   "devDependencies": {
-    "@types/canvas-confetti": "^1.9.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react-swc": "^3.11.0",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.0"
+    "@types/canvas-confetti": "1.9.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react-swc": "3.11.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.2"
   }
 }

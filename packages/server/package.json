@@ -18,17 +18,17 @@
   },
   "dependencies": {
     "@differ/shared": "workspace:*",
-    "@noble/hashes": "^2.2.0",
-    "@tsndr/cloudflare-worker-jwt": "^3.1.4",
-    "drizzle-orm": "^0.36.4",
-    "hono": "^4.6.9",
-    "otpauth": "^9.5.0",
-    "zod": "^3.23.8"
+    "@noble/hashes": "2.2.0",
+    "@tsndr/cloudflare-worker-jwt": "3.2.1",
+    "drizzle-orm": "0.36.4",
+    "hono": "4.12.14",
+    "otpauth": "9.5.0",
+    "zod": "3.25.76"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20241022.0",
-    "@types/node": "^20.16.0",
-    "typescript": "^5.6.3",
-    "wrangler": "^4.85.0"
+    "@cloudflare/workers-types": "4.20260424.1",
+    "@types/node": "24.12.2",
+    "typescript": "5.9.3",
+    "wrangler": "4.85.0"
   }
 }
