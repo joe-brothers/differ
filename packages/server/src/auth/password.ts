@@ -5,20 +5,33 @@
 // Argon2id stored format: PHC standard, e.g.
 //   `$argon2id$v=19$m=19456,t=2,p=1$<saltB64>$<hashB64>`
 // Legacy PBKDF2 stored format: `pbkdf2$<iterations>$<saltB64>$<hashB64>`.
+//
+// Implementation note: hash-wasm and other WASM libs can't be used here —
+// Cloudflare Workers blocks runtime `WebAssembly.compile()` of arbitrary
+// buffers. @noble/hashes is pure JS so it works on the Workers runtime.
 
-import { argon2id, argon2Verify } from "hash-wasm";
+import { argon2idAsync } from "@noble/hashes/argon2.js";
 
-// OWASP 2024 minimum for argon2id: m=19 MiB, t=2, p=1.
+// OWASP 2024 minimum profile for argon2id.
 const ARGON2_MEMORY_KIB = 19_456;
 const ARGON2_ITERATIONS = 2;
 const ARGON2_PARALLELISM = 1;
 const ARGON2_HASH_LEN = 32;
 const ARGON2_SALT_LEN = 16;
+const ARGON2_VERSION = 0x13;
 
 const PBKDF2_KEY_LEN_BITS = 256;
 
+function b64encNoPad(bytes: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+  return btoa(bin).replace(/=+$/, "");
+}
+
 function b64dec(s: string): Uint8Array {
-  const bin = atob(s);
+  const padLen = (4 - (s.length % 4)) % 4;
+  const padded = s + "=".repeat(padLen);
+  const bin = atob(padded);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
@@ -42,33 +55,56 @@ async function pbkdf2(password: string, salt: Uint8Array, iterations: number): P
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(ARGON2_SALT_LEN));
-  return argon2id({
-    password,
-    salt,
-    parallelism: ARGON2_PARALLELISM,
-    iterations: ARGON2_ITERATIONS,
-    memorySize: ARGON2_MEMORY_KIB,
-    hashLength: ARGON2_HASH_LEN,
-    outputType: "encoded",
+  const hash = await argon2idAsync(password, salt, {
+    t: ARGON2_ITERATIONS,
+    m: ARGON2_MEMORY_KIB,
+    p: ARGON2_PARALLELISM,
+    dkLen: ARGON2_HASH_LEN,
+    version: ARGON2_VERSION,
   });
+  const params = `m=${ARGON2_MEMORY_KIB},t=${ARGON2_ITERATIONS},p=${ARGON2_PARALLELISM}`;
+  return `$argon2id$v=${ARGON2_VERSION}$${params}$${b64encNoPad(salt)}$${b64encNoPad(hash)}`;
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  if (
-    stored.startsWith("$argon2id$") ||
-    stored.startsWith("$argon2i$") ||
-    stored.startsWith("$argon2d$")
-  ) {
-    try {
-      return await argon2Verify({ password, hash: stored });
-    } catch {
-      return false;
-    }
-  }
-  if (stored.startsWith("pbkdf2$")) {
-    return verifyPbkdf2(password, stored);
-  }
+  if (stored.startsWith("$argon2id$")) return verifyArgon2id(password, stored);
+  if (stored.startsWith("pbkdf2$")) return verifyPbkdf2(password, stored);
   return false;
+}
+
+// PHC: `$argon2id$v=<ver>$m=<m>,t=<t>,p=<p>$<saltB64>$<hashB64>`
+async function verifyArgon2id(password: string, stored: string): Promise<boolean> {
+  const parts = stored.split("$");
+  // ['', 'argon2id', 'v=19', 'm=...,t=...,p=...', saltB64, hashB64]
+  if (parts.length !== 6) return false;
+  const ver = Number(parts[2]!.slice(2));
+  const paramMap = new Map<string, number>();
+  for (const kv of parts[3]!.split(",")) {
+    const [k, v] = kv.split("=");
+    if (!k || !v) return false;
+    paramMap.set(k, Number(v));
+  }
+  const m = paramMap.get("m");
+  const t = paramMap.get("t");
+  const p = paramMap.get("p");
+  if (!Number.isFinite(ver) || !Number.isFinite(m) || !Number.isFinite(t) || !Number.isFinite(p)) {
+    return false;
+  }
+  const salt = b64dec(parts[4]!);
+  const expected = b64dec(parts[5]!);
+  let actual: Uint8Array;
+  try {
+    actual = await argon2idAsync(password, salt, {
+      t: t!,
+      m: m!,
+      p: p!,
+      dkLen: expected.length,
+      version: ver,
+    });
+  } catch {
+    return false;
+  }
+  return constantTimeEq(actual, expected);
 }
 
 async function verifyPbkdf2(password: string, stored: string): Promise<boolean> {
@@ -79,9 +115,13 @@ async function verifyPbkdf2(password: string, stored: string): Promise<boolean> 
   const salt = b64dec(parts[2]!);
   const expected = b64dec(parts[3]!);
   const actual = await pbkdf2(password, salt, iter);
-  if (actual.length !== expected.length) return false;
+  return constantTimeEq(actual, expected);
+}
+
+function constantTimeEq(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
   let diff = 0;
-  for (let i = 0; i < actual.length; i++) diff |= actual[i]! ^ expected[i]!;
+  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
   return diff === 0;
 }
 

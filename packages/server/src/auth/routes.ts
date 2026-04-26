@@ -136,8 +136,8 @@ authRoutes.post("/login", async (c) => {
     try {
       const fresh = await hashPassword(password);
       await db.update(users).set({ passwordHash: fresh }).where(eq(users.id, row.id)).run();
-    } catch {
-      // swallow; user can be rehashed on a later login
+    } catch (err) {
+      console.error("password rehash failed", { userId: row.id, err: String(err) });
     }
   }
   if (row.totpEnabled === 1) {
@@ -396,8 +396,8 @@ protectedRoutes.post("/totp/disable", async (c) => {
   if (needsRehash(row.passwordHash)) {
     try {
       updates.passwordHash = await hashPassword(parsed.data.password);
-    } catch {
-      // swallow; rehash can happen on a later verify
+    } catch (err) {
+      console.error("password rehash failed", { userId: claims.sub, err: String(err) });
     }
   }
   await db.update(users).set(updates).where(eq(users.id, claims.sub)).run();
