@@ -5,7 +5,7 @@ import { game } from "../core/Game";
 import { leaderboardApi } from "../network/rest";
 import type { LeaderboardEntry } from "@differ/shared";
 
-type LbMode = "single" | "1v1";
+type LbMode = "single" | "1v1" | "daily";
 
 const FONT_SANS = "Arial, sans-serif";
 const FONT_MONO = '"Roboto Mono", "JetBrains Mono", ui-monospace, monospace';
@@ -19,9 +19,9 @@ const HORIZONTAL_PADDING = 16;
 export class LeaderboardScene extends Container implements IScene {
   private app: Application;
   private tableContainer: Container;
-  private tabs: { single: Container; onevone: Container } | null = null;
+  private tabs: { daily: Container; single: Container; onevone: Container } | null = null;
   private loadingText: Text | null = null;
-  private currentMode: LbMode = "single";
+  private currentMode: LbMode = "daily";
 
   constructor(app: Application) {
     super();
@@ -70,24 +70,29 @@ export class LeaderboardScene extends Container implements IScene {
 
   private createTabs(): void {
     const y = UI_PADDING + 60;
-    const tabWidth = 140;
+    const tabWidth = 120;
     const tabHeight = 36;
     const gap = 12;
-    const totalWidth = tabWidth * 2 + gap;
+    const totalWidth = tabWidth * 3 + gap * 2;
     const startX = Math.round(this.app.screen.width / 2 - totalWidth / 2);
+
+    const dailyTab = this.makeTab("Daily", tabWidth, tabHeight, () => {
+      this.setMode("daily");
+    });
+    dailyTab.position.set(startX + tabWidth / 2, y);
 
     const singleTab = this.makeTab("5 Sprint", tabWidth, tabHeight, () => {
       this.setMode("single");
     });
-    singleTab.position.set(startX + tabWidth / 2, y);
+    singleTab.position.set(startX + tabWidth + gap + tabWidth / 2, y);
 
     const multiTab = this.makeTab("1v1", tabWidth, tabHeight, () => {
       this.setMode("1v1");
     });
-    multiTab.position.set(startX + tabWidth + gap + tabWidth / 2, y);
+    multiTab.position.set(startX + (tabWidth + gap) * 2 + tabWidth / 2, y);
 
-    this.addChild(singleTab, multiTab);
-    this.tabs = { single: singleTab, onevone: multiTab };
+    this.addChild(dailyTab, singleTab, multiTab);
+    this.tabs = { daily: dailyTab, single: singleTab, onevone: multiTab };
     this.highlightTabs();
   }
 
@@ -112,8 +117,11 @@ export class LeaderboardScene extends Container implements IScene {
     button.addChild(bg, text);
     button.eventMode = "static";
     button.cursor = "pointer";
-    (button as Container & { __bg: Graphics; __text: Text }).__bg = bg;
-    (button as Container & { __bg: Graphics; __text: Text }).__text = text;
+    (button as Container & { __bg: Graphics; __text: Text; __w: number; __h: number }).__bg = bg;
+    (button as Container & { __bg: Graphics; __text: Text; __w: number; __h: number }).__text =
+      text;
+    (button as Container & { __bg: Graphics; __text: Text; __w: number; __h: number }).__w = w;
+    (button as Container & { __bg: Graphics; __text: Text; __w: number; __h: number }).__h = h;
 
     button.on("pointerdown", onClick);
     return button;
@@ -122,13 +130,14 @@ export class LeaderboardScene extends Container implements IScene {
   private highlightTabs(): void {
     if (!this.tabs) return;
     const paint = (c: Container, active: boolean) => {
-      const el = c as Container & { __bg: Graphics; __text: Text };
+      const el = c as Container & { __bg: Graphics; __text: Text; __w: number; __h: number };
       el.__bg.clear();
-      el.__bg.roundRect(-70, -18, 140, 36, 4);
+      el.__bg.roundRect(-el.__w / 2, -el.__h / 2, el.__w, el.__h, 4);
       el.__bg.fill(active ? COLORS.primarySoft : COLORS.surface);
       el.__bg.stroke({ color: active ? COLORS.primary : COLORS.border, width: 1 });
       el.__text.style.fill = active ? COLORS.primary : COLORS.textSecondary;
     };
+    paint(this.tabs.daily, this.currentMode === "daily");
     paint(this.tabs.single, this.currentMode === "single");
     paint(this.tabs.onevone, this.currentMode === "1v1");
   }
@@ -147,7 +156,7 @@ export class LeaderboardScene extends Container implements IScene {
       this.loadingText.visible = true;
     }
     try {
-      const result = await leaderboardApi.list(mode, 20, 0);
+      const result = await leaderboardApi.list(mode, { limit: 20, offset: 0 });
       // Drop request if the user switched modes while we were waiting.
       if (this.currentMode !== mode) return;
       if (this.loadingText) this.loadingText.visible = false;
@@ -276,7 +285,7 @@ export class LeaderboardScene extends Container implements IScene {
 
     make("Rank", HORIZONTAL_PADDING, 0);
     make("Player", HORIZONTAL_PADDING + 64, 0);
-    make(mode === "single" ? "Best" : "Wins", CARD_WIDTH - HORIZONTAL_PADDING, 1);
+    make(mode === "1v1" ? "Wins" : "Best", CARD_WIDTH - HORIZONTAL_PADDING, 1);
 
     return header;
   }
@@ -305,12 +314,13 @@ export class LeaderboardScene extends Container implements IScene {
 
     let metricText: string;
     let metricColor: number;
-    if (mode === "single") {
-      metricText = entry.bestMs != null ? formatMs(entry.bestMs) : "–";
-      metricColor = entry.bestMs != null ? COLORS.text : COLORS.textTertiary;
-    } else {
+    if (mode === "1v1") {
       metricText = entry.wins.toString();
       metricColor = COLORS.text;
+    } else {
+      // single & daily are both time-attacks
+      metricText = entry.bestMs != null ? formatMs(entry.bestMs) : "–";
+      metricColor = entry.bestMs != null ? COLORS.text : COLORS.textTertiary;
     }
 
     const metric = new Text({

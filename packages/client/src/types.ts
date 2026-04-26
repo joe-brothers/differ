@@ -28,7 +28,7 @@ export interface SelectedDifference {
 export type GameMode = "menu" | "playing" | "paused" | "completed";
 
 // Game type
-export type GameType = "single" | "one_on_one";
+export type GameType = "single" | "one_on_one" | "daily";
 
 // Game state
 export interface GameState {

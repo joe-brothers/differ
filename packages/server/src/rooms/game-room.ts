@@ -11,8 +11,9 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Env } from "../env.js";
 import { verifyToken } from "../auth/jwt.js";
 import { getDb } from "../db/client.js";
-import { gameParticipants, games, users } from "../db/schema.js";
+import { dailyAttempts, gameParticipants, games, users, userStats } from "../db/schema.js";
 import { buildRound, findHit, type RoundPuzzle } from "../puzzles/service.js";
+import { getDailyRound, utcDateKey } from "../daily/service.js";
 
 type RoomStatus = "waiting" | "in_progress" | "ended";
 type EndReason = "winner" | "timeout";
@@ -20,6 +21,7 @@ type EndReason = "winner" | "timeout";
 interface StoredPlayer {
   userId: string;
   name: string;
+  isGuest: boolean;
   ready: boolean;
   foundPerPuzzle: Record<number, string[]>; // puzzleIdx -> diffIds
   elapsedMs: number | null;
@@ -36,11 +38,16 @@ interface StoredRoom {
   winnerId: string | null;
   gamesPlayed: number; // 0 = first game (auto-start); >0 = rematch (both must ready)
   lastActivityAt: number; // baseline for idle cleanup
+  // Set on init for mode==='daily'. Frozen at room creation time so a player
+  // who starts at 23:59 UTC and finishes at 00:01 UTC still gets yesterday's
+  // puzzle set (and yesterday's daily_attempts row).
+  dailyDate?: string;
 }
 
 interface SocketAttachment {
   userId: string;
   name: string;
+  isGuest: boolean;
 }
 
 const ROOM_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
@@ -79,8 +86,13 @@ export class GameRoom implements DurableObject {
     const url = new URL(req.url);
 
     if (url.pathname === "/__init__" && req.method === "POST") {
-      const body = await req.json<{ roomCode: string; mode: GameMode; createdBy: string }>();
-      return this.initRoom(body.roomCode, body.mode);
+      const body = await req.json<{
+        roomCode: string;
+        mode: GameMode;
+        createdBy: string;
+        dailyDate?: string;
+      }>();
+      return this.initRoom(body.roomCode, body.mode, body.dailyDate);
     }
 
     const upgrade = req.headers.get("Upgrade");
@@ -100,6 +112,7 @@ export class GameRoom implements DurableObject {
       server.serializeAttachment({
         userId: claims.sub,
         name: claims.name,
+        isGuest: claims.isGuest,
       } satisfies SocketAttachment);
       return new Response(null, { status: 101, webSocket: client });
     }
@@ -271,7 +284,7 @@ export class GameRoom implements DurableObject {
 
   // ─── Handlers ────────────────────────────────────────────────────────────
 
-  private async initRoom(code: string, mode: GameMode): Promise<Response> {
+  private async initRoom(code: string, mode: GameMode, dailyDate?: string): Promise<Response> {
     if (this.room) {
       return new Response(JSON.stringify({ ok: true, already: true }), {
         headers: { "content-type": "application/json" },
@@ -289,6 +302,7 @@ export class GameRoom implements DurableObject {
       winnerId: null,
       gamesPlayed: 0,
       lastActivityAt: now,
+      dailyDate: mode === "daily" ? dailyDate : undefined,
     };
     await this.persist();
     return new Response(JSON.stringify({ ok: true }), {
@@ -302,9 +316,9 @@ export class GameRoom implements DurableObject {
       ws.close(1011);
       return;
     }
-    const { userId, name } = attachment;
+    const { userId, name, isGuest } = attachment;
 
-    const capacity = this.room.mode === "single" ? 1 : 2;
+    const capacity = this.room.mode === "1v1" ? 2 : 1;
     const existing = this.room.players[userId];
     if (!existing) {
       if (Object.keys(this.room.players).length >= capacity) {
@@ -320,6 +334,7 @@ export class GameRoom implements DurableObject {
       this.room.players[userId] = {
         userId,
         name,
+        isGuest,
         ready: false,
         foundPerPuzzle: {},
         elapsedMs: null,
@@ -382,7 +397,7 @@ export class GameRoom implements DurableObject {
     player.ready = true;
     this.broadcast({ kind: "player_ready", userId });
 
-    const capacity = this.room.mode === "single" ? 1 : 2;
+    const capacity = this.room.mode === "1v1" ? 2 : 1;
     const playerList = Object.values(this.room.players);
     if (playerList.length >= capacity && playerList.every((p) => p.ready)) {
       await this.startGame();
@@ -394,7 +409,12 @@ export class GameRoom implements DurableObject {
 
   private async startGame(): Promise<void> {
     if (!this.room) return;
-    const puzzles = await buildRound(this.env);
+    // Daily uses the day's frozen set (cron-built or lazy-fallback) so every
+    // player on a given UTC date sees the exact same puzzles + diff selection.
+    const puzzles =
+      this.room.mode === "daily"
+        ? await getDailyRound(this.env, this.room.dailyDate ?? utcDateKey())
+        : await buildRound(this.env);
     this.room.puzzles = puzzles;
     this.room.status = "in_progress";
     // Future-dated so both clients can cover image loading + countdown and
@@ -499,6 +519,10 @@ export class GameRoom implements DurableObject {
       let outcome: "win" | "loss" | "timeout";
       if (reason === "timeout") outcome = "timeout";
       else outcome = p.userId === winnerId ? "win" : "loss";
+      // Daily mode: guests don't earn participant rows (no leaderboard / no
+      // history) per D4. The games row is still inserted so daily_attempts
+      // can FK to it and prove "this guest used their attempt today".
+      if (this.room.mode === "daily" && p.isGuest) continue;
       participantRows.push({
         gameId,
         userId: p.userId,
@@ -509,12 +533,38 @@ export class GameRoom implements DurableObject {
         endedAt,
       });
     }
+    const db = getDb(this.env.DB);
+    const writes: Promise<unknown>[] = [];
+    // games row is always inserted (any mode, any participant set) so daily
+    // attempts and future analytics have a stable join key.
+    writes.push(db.insert(games).values(gameRow).run());
     if (participantRows.length > 0) {
-      const db = getDb(this.env.DB);
-      await db.batch([
-        db.insert(games).values(gameRow),
-        db.insert(gameParticipants).values(participantRows),
-      ]);
+      writes.push(db.insert(gameParticipants).values(participantRows).run());
+    }
+    if (this.room.mode === "daily" && this.room.dailyDate) {
+      const date = this.room.dailyDate;
+      for (const p of Object.values(this.room.players)) {
+        // One attempt per (user, date). onConflict no-op so a network-induced
+        // double-end never crashes the room.
+        writes.push(
+          db
+            .insert(dailyAttempts)
+            .values({ userId: p.userId, date, gameId })
+            .onConflictDoNothing()
+            .run(),
+        );
+      }
+    }
+    await Promise.all(writes);
+
+    // Streak counters update lazily on each daily completion. Only registered
+    // users build streaks (guests are device-bound and easily reset).
+    if (this.room.mode === "daily" && this.room.dailyDate && reason === "winner") {
+      for (const p of Object.values(this.room.players)) {
+        if (p.isGuest) continue;
+        if (p.userId !== winnerId) continue;
+        await this.updateStreak(p.userId, this.room.dailyDate);
+      }
     }
 
     // Report every player's elapsed time in the broadcast so losers can show
@@ -646,6 +696,48 @@ export class GameRoom implements DurableObject {
     for (const r of rows) out.set(r.userId, Number(r.c) || 0);
     for (const id of userIds) if (!out.has(id)) out.set(id, 0);
     return out;
+  }
+
+  // Lazy streak update on daily completion. `last_daily_date == date - 1` is
+  // a continuation; anything else (gap, no row yet) starts a fresh streak at 1.
+  // Called only for non-guest winners — guests are device-bound and easily
+  // reset, so streaks would be meaningless for them.
+  private async updateStreak(userId: string, date: string): Promise<void> {
+    const db = getDb(this.env.DB);
+    const prev = await db
+      .select({
+        current: userStats.currentStreak,
+        longest: userStats.longestStreak,
+        last: userStats.lastDailyDate,
+      })
+      .from(userStats)
+      .where(eq(userStats.userId, userId))
+      .limit(1);
+
+    const yday = utcDateKey(new Date(Date.parse(date + "T00:00:00Z") - 24 * 60 * 60 * 1000));
+    const continued = prev.length > 0 && prev[0]!.last === yday;
+    const sameDay = prev.length > 0 && prev[0]!.last === date;
+    if (sameDay) return; // already counted (idempotent)
+    const current = continued ? prev[0]!.current + 1 : 1;
+    const longest = Math.max(prev[0]?.longest ?? 0, current);
+
+    await db
+      .insert(userStats)
+      .values({
+        userId,
+        currentStreak: current,
+        longestStreak: longest,
+        lastDailyDate: date,
+      })
+      .onConflictDoUpdate({
+        target: userStats.userId,
+        set: {
+          currentStreak: current,
+          longestStreak: longest,
+          lastDailyDate: date,
+          updatedAt: sql`(datetime('now'))`,
+        },
+      });
   }
 
   private isClickRateLimited(userId: string): boolean {

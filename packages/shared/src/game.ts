@@ -16,7 +16,7 @@ export const Puzzle = z.object({
 });
 export type Puzzle = z.infer<typeof Puzzle>;
 
-export const GameMode = z.enum(["single", "1v1"]);
+export const GameMode = z.enum(["single", "1v1", "daily"]);
 export type GameMode = z.infer<typeof GameMode>;
 
 export const PUZZLES_PER_GAME = 5;

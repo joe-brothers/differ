@@ -78,3 +78,46 @@ export const gameParticipants = sqliteTable(
     modeElapsedIdx: index("idx_gp_mode_elapsed").on(t.mode, t.elapsedMs),
   }),
 );
+
+// Daily Challenge: the day's fixed puzzle set. Built by a cron trigger at
+// 00:05 UTC; if the row is missing at read time (cron skip / first deploy)
+// the request handler builds it on demand and inserts the same way.
+export const dailyPuzzles = sqliteTable("daily_puzzles", {
+  date: text("date").primaryKey(),
+  puzzleSet: text("puzzle_set").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+// One row per (user, UTC date). Enforces the "one attempt per day" rule and
+// lets the client re-fetch the existing result instead of starting a new run.
+export const dailyAttempts = sqliteTable(
+  "daily_attempts",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    date: text("date").notNull(),
+    gameId: text("game_id")
+      .notNull()
+      .references(() => games.id),
+  },
+  (t) => ({
+    dateIdx: index("idx_daily_attempts_date").on(t.date, t.userId),
+  }),
+);
+
+// Lazy-updated streak counters — written on each daily completion. Reset is
+// implied by `last_daily_date < yesterday` at write time, so no cron sweep.
+export const userStats = sqliteTable("user_stats", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  currentStreak: integer("current_streak").notNull().default(0),
+  longestStreak: integer("longest_streak").notNull().default(0),
+  lastDailyDate: text("last_daily_date"),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});

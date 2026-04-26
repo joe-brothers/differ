@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { useUIStore, type OverlayModal } from "../store";
 import { cardStyle, CSS, FONT_MONO, modalBackdropStyle } from "../styles";
 import { Button } from "./Button";
@@ -28,6 +28,91 @@ interface Copy {
   titleColor: string;
   subtitle: ReactNode;
   playAgainLabel: string;
+}
+
+function buildShareText(args: {
+  date: string;
+  elapsedSec: number | null;
+  foundCount: number;
+}): string {
+  const result =
+    args.elapsedSec != null
+      ? formatTime(args.elapsedSec)
+      : `${args.foundCount}/${TOTAL_DIFFS_PER_GAME}`;
+  return `Differ Daily ${args.date} — ${result}\n${window.location.origin}`;
+}
+
+function DailyCompleteCard({
+  modal,
+  onMainMenu,
+}: {
+  modal: Extract<OverlayModal, { type: "complete-daily" }>;
+  onMainMenu: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const completed = modal.elapsedSec != null;
+
+  const onCopy = async () => {
+    const text = buildShareText({
+      date: modal.date,
+      elapsedSec: modal.elapsedSec,
+      foundCount: modal.foundCount,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked — leave the button silent */
+    }
+  };
+
+  return (
+    <div style={modalBackdropStyle(0.5)}>
+      <div style={{ ...cardStyle, minWidth: 400, gap: 12 }}>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 28,
+            lineHeight: "36px",
+            fontWeight: 500,
+            color: completed ? CSS.success : CSS.textSecondary,
+          }}
+        >
+          {completed ? "Daily Complete" : "Daily Finished"}
+        </h2>
+        <p style={{ margin: 0, fontSize: 14, color: CSS.textSecondary }}>{modal.date}</p>
+
+        <div style={{ marginTop: 12, fontSize: 12, color: CSS.textSecondary, letterSpacing: 0.5 }}>
+          {completed ? "YOUR TIME" : "YOUR PROGRESS"}
+        </div>
+        <div
+          style={{
+            fontFamily: FONT_MONO,
+            fontSize: 48,
+            fontWeight: 500,
+            color: CSS.text,
+            lineHeight: 1.1,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {completed
+            ? formatTime(modal.elapsedSec ?? 0)
+            : `${modal.foundCount}/${TOTAL_DIFFS_PER_GAME}`}
+        </div>
+
+        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+          <Button label={copied ? "Copied!" : "Copy Result"} color={CSS.primary} onClick={onCopy} />
+          <Button
+            label="Main Menu"
+            color={CSS.surface}
+            onClick={onMainMenu}
+            style={{ color: CSS.text, border: `1px solid ${CSS.border}` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function getCopy(
@@ -60,6 +145,10 @@ export function GameCompleteModal() {
   const rematchPending = useUIStore((s) => s.rematchPending);
   const opponentRematch = useUIStore((s) => s.opponentRematch);
   const callbacks = useUIStore((s) => s.callbacks);
+
+  if (modal.type === "complete-daily") {
+    return <DailyCompleteCard modal={modal} onMainMenu={() => callbacks.onMainMenu?.()} />;
+  }
 
   if (modal.type !== "complete-single" && modal.type !== "complete-1v1") return null;
 

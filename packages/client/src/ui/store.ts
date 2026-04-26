@@ -18,6 +18,15 @@ export type OverlayModal =
       foundCount: number;
       opponentFoundCount: number;
       opponentName: string;
+    }
+  | {
+      type: "complete-daily";
+      // null when the daily ran out the clock (timeout) — modal renders the
+      // foundCount line instead of a time.
+      elapsedSec: number | null;
+      foundCount: number;
+      // UTC date this attempt was for (YYYY-MM-DD). Used in the share text.
+      date: string;
     };
 
 interface UIStore {
@@ -72,6 +81,11 @@ interface UIStore {
     opponentFoundCount: number,
     opponentName: string,
   ) => void;
+  showCompleteDaily: (args: {
+    elapsedSec: number | null;
+    foundCount: number;
+    date: string;
+  }) => void;
   markRematchPending: () => void;
   markOpponentRematch: () => void;
 
@@ -144,6 +158,12 @@ export const useUIStore = create<UIStore>((set) => ({
         opponentFoundCount,
         opponentName,
       },
+      rematchPending: false,
+      opponentRematch: false,
+    }),
+  showCompleteDaily: ({ elapsedSec, foundCount, date }) =>
+    set({
+      modal: { type: "complete-daily", elapsedSec, foundCount, date },
       rematchPending: false,
       opponentRematch: false,
     }),

@@ -70,6 +70,12 @@ simple = { limit = 5, period = 60 }
 [observability]
 enabled = true
 
+# Daily Challenge: build the next day's puzzle set at 00:05 UTC. The 5-minute
+# offset is buffer for clock skew / cron lag — clients reading exactly at
+# midnight may briefly see yesterday's set or hit the lazy-build fallback.
+[triggers]
+crons = ["5 0 * * *"]
+
 # === Production ============================================================
 
 [env.production]
@@ -135,3 +141,6 @@ simple = { limit = 5, period = 60 }
 
 [env.production.observability]
 enabled = true
+
+[env.production.triggers]
+crons = ["5 0 * * *"]

@@ -201,8 +201,9 @@ export class HistoryScene extends Container implements IScene {
 
     row.addChild(this.buildOutcomeChip(entry, COL.outcomeX, midY));
 
+    const isSolo = entry.mode === "single" || entry.mode === "daily";
     const modeLabel = new Text({
-      text: entry.mode === "single" ? "Sprint" : "1v1",
+      text: entry.mode === "daily" ? "Daily" : entry.mode === "single" ? "Sprint" : "1v1",
       style: {
         fontFamily: FONT_SANS,
         fontSize: 13,
@@ -214,12 +215,12 @@ export class HistoryScene extends Container implements IScene {
     row.addChild(modeLabel);
 
     const opponentLabel = new Text({
-      text: entry.mode === "single" ? "Solo" : (entry.opponent?.name ?? "—"),
+      text: isSolo ? "Solo" : (entry.opponent?.name ?? "—"),
       style: {
         fontFamily: FONT_SANS,
         fontSize: 14,
         fontWeight: "500",
-        fill: entry.mode === "single" ? COLORS.textSecondary : COLORS.text,
+        fill: isSolo ? COLORS.textSecondary : COLORS.text,
       },
     });
     opponentLabel.anchor.set(0, 0.5);
@@ -301,6 +302,7 @@ export class HistoryScene extends Container implements IScene {
 
 // Solo timeouts are hidden from the recent list — they aren't an interesting
 // outcome to surface. 1v1 timeouts remain (rendered as DRAW or WIN/LOSS).
+// Daily timeouts are kept (the daily attempt is still meaningful).
 function isDisplayable(entry: RecentGameEntry): boolean {
   return !(entry.outcome === "timeout" && entry.mode === "single");
 }

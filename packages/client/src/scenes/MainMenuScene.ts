@@ -5,23 +5,26 @@ import { COLORS } from "../constants";
 import { game } from "../core/Game";
 import { authState } from "../managers/AuthStateManager";
 import { HtmlOverlay } from "../ui/HtmlOverlay";
-import { ApiError, authApi } from "../network/rest";
+import { ApiError, authApi, dailyApi, type DailyTodayRes } from "../network/rest";
 import { evaluatePassword, PASSWORD_HINT } from "../managers/passwordStrength";
 
 export class MainMenuScene extends Container implements IScene {
   private app: Application;
   private title: Text | null = null;
+  private dailyButton: Container | null = null;
   private sprintButton: Container | null = null;
   private matchButton: Container | null = null;
   private leaderboardButton: Container | null = null;
   private historyButton: Container | null = null;
   private usernameText: Text | null = null;
   private winsText: Text | null = null;
+  private streakText: Text | null = null;
   private logoutText: Text | null = null;
   private upgradeText: Text | null = null;
   private settingsText: Text | null = null;
   private upgradeOverlay: HtmlOverlay | null = null;
   private settingsOverlay: HtmlOverlay | null = null;
+  private dailyToday: DailyTodayRes | null = null;
 
   constructor(app: Application) {
     super();
@@ -30,6 +33,7 @@ export class MainMenuScene extends Container implements IScene {
 
   async init(): Promise<void> {
     this.createTitle();
+    this.createDailyButton();
     this.createSprintButton();
     this.createMatchButton();
     this.createLeaderboardButton();
@@ -42,6 +46,18 @@ export class MainMenuScene extends Container implements IScene {
     // Pull fresh stats (wins) so the counter reflects games played in the
     // last session — fire-and-forget so the menu still draws instantly.
     void authState.refresh().then(() => this.refreshUserInfo());
+    // Daily status — also fire-and-forget. Renders the button label as
+    // "Played today" / "Play" and updates the streak line in the corner.
+    void dailyApi
+      .today()
+      .then((res) => {
+        this.dailyToday = res;
+        this.refreshDailyButton();
+        this.refreshStreak();
+      })
+      .catch(() => {
+        /* leave the button in default "Daily Challenge" state */
+      });
   }
 
   private createTitle(): void {
@@ -72,11 +88,103 @@ export class MainMenuScene extends Container implements IScene {
     bg.stroke({ color: COLORS.border, width: 1 });
   }
 
+  private createDailyButton(): void {
+    const buttonWidth = 250;
+    const buttonHeight = 48;
+    const buttonX = this.app.screen.width / 2;
+    const buttonY = this.dailyButtonY();
+
+    this.dailyButton = new Container();
+    this.dailyButton.position.set(buttonX, buttonY);
+
+    const bg = new Graphics();
+    this.drawFilledButton(bg, buttonWidth, buttonHeight, COLORS.primary);
+
+    const text = new Text({
+      text: "Daily Challenge",
+      style: {
+        fontFamily: "Arial, sans-serif",
+        fontSize: 16,
+        fontWeight: "500",
+        fill: COLORS.primaryOn,
+      },
+    });
+    text.anchor.set(0.5);
+    (this.dailyButton as Container & { __text: Text; __bg: Graphics }).__text = text;
+    (this.dailyButton as Container & { __text: Text; __bg: Graphics }).__bg = bg;
+
+    this.dailyButton.addChild(bg, text);
+    this.dailyButton.eventMode = "static";
+    this.dailyButton.cursor = "pointer";
+
+    this.dailyButton.on("pointerover", () => {
+      if (this.isDailyDisabled()) return;
+      this.drawFilledButton(bg, buttonWidth, buttonHeight, COLORS.primaryHover);
+    });
+    this.dailyButton.on("pointerout", () => {
+      if (this.isDailyDisabled()) return;
+      this.drawFilledButton(bg, buttonWidth, buttonHeight, COLORS.primary);
+    });
+    this.dailyButton.on("pointerdown", () => {
+      if (this.isDailyDisabled()) return;
+      void game.startDailyChallenge();
+    });
+
+    this.addChild(this.dailyButton);
+  }
+
+  private isDailyDisabled(): boolean {
+    return !!this.dailyToday?.played;
+  }
+
+  // Daily button sits above the existing 4-button stack. 56px button-to-button
+  // pitch matches the spacing between sprint/match/leaderboard/history below.
+  private dailyButtonY(): number {
+    return this.app.screen.height / 2 - 56;
+  }
+  private sprintButtonY(): number {
+    return this.app.screen.height / 2;
+  }
+  private matchButtonY(): number {
+    return this.app.screen.height / 2 + 56;
+  }
+  private leaderboardButtonY(): number {
+    return this.app.screen.height / 2 + 112;
+  }
+  private historyButtonY(): number {
+    return this.app.screen.height / 2 + 168;
+  }
+
+  private refreshDailyButton(): void {
+    if (!this.dailyButton) return;
+    const played = this.dailyToday?.played ?? false;
+    const el = this.dailyButton as Container & { __text: Text; __bg: Graphics };
+    const ms = this.dailyToday?.result?.elapsedMs;
+    if (played) {
+      this.drawFilledButton(el.__bg, 250, 48, COLORS.surfaceMuted);
+      el.__bg.stroke({ color: COLORS.border, width: 1 });
+      el.__text.text = ms != null ? `Daily • ${formatMs(ms)}` : "Daily • Played today";
+      el.__text.style.fill = COLORS.textSecondary;
+      this.dailyButton.cursor = "default";
+    } else {
+      this.drawFilledButton(el.__bg, 250, 48, COLORS.primary);
+      el.__text.text = "Daily Challenge";
+      el.__text.style.fill = COLORS.primaryOn;
+      this.dailyButton.cursor = "pointer";
+    }
+  }
+
+  private refreshStreak(): void {
+    if (!this.streakText) return;
+    const cur = this.dailyToday?.streak.current ?? 0;
+    this.streakText.text = cur > 0 ? `🔥 ${cur}-day streak` : "";
+  }
+
   private createSprintButton(): void {
     const buttonWidth = 250;
     const buttonHeight = 48;
     const buttonX = this.app.screen.width / 2;
-    const buttonY = this.app.screen.height / 2 - 40;
+    const buttonY = this.sprintButtonY();
 
     this.sprintButton = new Container();
     this.sprintButton.position.set(buttonX, buttonY);
@@ -116,7 +224,7 @@ export class MainMenuScene extends Container implements IScene {
     const buttonWidth = 250;
     const buttonHeight = 48;
     const buttonX = this.app.screen.width / 2;
-    const buttonY = this.app.screen.height / 2 + 16;
+    const buttonY = this.matchButtonY();
 
     this.matchButton = new Container();
     this.matchButton.position.set(buttonX, buttonY);
@@ -156,7 +264,7 @@ export class MainMenuScene extends Container implements IScene {
     const buttonWidth = 250;
     const buttonHeight = 48;
     const buttonX = this.app.screen.width / 2;
-    const buttonY = this.app.screen.height / 2 + 72;
+    const buttonY = this.leaderboardButtonY();
 
     this.leaderboardButton = new Container();
     this.leaderboardButton.position.set(buttonX, buttonY);
@@ -196,7 +304,7 @@ export class MainMenuScene extends Container implements IScene {
     const buttonWidth = 250;
     const buttonHeight = 48;
     const buttonX = this.app.screen.width / 2;
-    const buttonY = this.app.screen.height / 2 + 128;
+    const buttonY = this.historyButtonY();
 
     this.historyButton = new Container();
     this.historyButton.position.set(buttonX, buttonY);
@@ -278,6 +386,21 @@ export class MainMenuScene extends Container implements IScene {
       this.winsText.anchor.set(1, 0);
       this.winsText.position.set(this.app.screen.width - 20, nextY);
       this.addChild(this.winsText);
+      nextY += 22;
+
+      // Streak — populated lazily by refreshStreak() once dailyApi.today()
+      // resolves. Empty until then so the corner doesn't flash text.
+      this.streakText = new Text({
+        text: "",
+        style: {
+          fontFamily: "Arial, sans-serif",
+          fontSize: 14,
+          fill: COLORS.textSecondary,
+        },
+      });
+      this.streakText.anchor.set(1, 0);
+      this.streakText.position.set(this.app.screen.width - 20, nextY);
+      this.addChild(this.streakText);
       nextY += 22;
     }
 
@@ -777,14 +900,20 @@ export class MainMenuScene extends Container implements IScene {
     if (this.title) {
       this.title.position.set(width / 2, height / 4);
     }
+    if (this.dailyButton) {
+      this.dailyButton.position.set(width / 2, this.dailyButtonY());
+    }
     if (this.sprintButton) {
-      this.sprintButton.position.set(width / 2, height / 2 - 40);
+      this.sprintButton.position.set(width / 2, this.sprintButtonY());
     }
     if (this.matchButton) {
-      this.matchButton.position.set(width / 2, height / 2 + 16);
+      this.matchButton.position.set(width / 2, this.matchButtonY());
     }
     if (this.leaderboardButton) {
-      this.leaderboardButton.position.set(width / 2, height / 2 + 72);
+      this.leaderboardButton.position.set(width / 2, this.leaderboardButtonY());
+    }
+    if (this.historyButton) {
+      this.historyButton.position.set(width / 2, this.historyButtonY());
     }
     if (this.usernameText) {
       this.usernameText.position.set(width - 20, 20);
@@ -792,6 +921,10 @@ export class MainMenuScene extends Container implements IScene {
     let y = 46;
     if (this.winsText) {
       this.winsText.position.set(width - 20, y);
+      y += 22;
+    }
+    if (this.streakText) {
+      this.streakText.position.set(width - 20, y);
       y += 22;
     }
     if (this.upgradeText) {
@@ -815,4 +948,11 @@ export class MainMenuScene extends Container implements IScene {
     this.removeAllListeners();
     super.destroy({ children: true });
   }
+}
+
+function formatMs(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }

@@ -23,20 +23,24 @@ function genRoomCode(): string {
   return out;
 }
 
-// Allocates a new GameRoom DO and initializes it. Used by both the explicit
-// `POST /rooms` flow and the matchmaking queue's auto-pairing path.
+// Allocates a new GameRoom DO and initializes it. Used by:
+//   - explicit `POST /rooms` flow (random new code)
+//   - matchmaking queue auto-pairing
+//   - daily challenge entry point (deterministic code per (date, userId) so
+//     a refresh / reconnect resumes the same room)
 export async function createGameRoom(
   env: Env,
   mode: GameMode,
   createdBy: string,
+  opts: { roomCode?: string; dailyDate?: string } = {},
 ): Promise<{ roomCode: string }> {
-  const roomCode = genRoomCode();
+  const roomCode = opts.roomCode ?? genRoomCode();
   const id = env.GAME_ROOM.idFromName(roomCode);
   const stub = env.GAME_ROOM.get(id);
   const initRes = await stub.fetch("https://do/__init__", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ roomCode, mode, createdBy }),
+    body: JSON.stringify({ roomCode, mode, createdBy, dailyDate: opts.dailyDate }),
   });
   if (!initRes.ok) {
     const body = await initRes.text();

@@ -309,6 +309,15 @@ export class GameScene extends Container implements IScene {
           oppFound,
           opponentName,
         );
+      } else if (state.gameType === "daily") {
+        // Daily attempts are 1-shot — the modal carries the share card
+        // payload. UTC date defaults to today since the room itself was
+        // started with that date frozen server-side.
+        ui.showCompleteDaily({
+          elapsedSec: msg.winnerId === myId ? myElapsedSec : null,
+          foundCount: mine?.foundCount ?? state.foundCount,
+          date: new Date().toISOString().slice(0, 10),
+        });
       } else {
         ui.showCompleteSingle(myElapsedSec);
       }

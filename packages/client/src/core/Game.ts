@@ -12,7 +12,7 @@ import { HistoryScene } from "../scenes/HistoryScene";
 import { MatchmakingScene } from "../scenes/MatchmakingScene";
 import type { ImageData, SelectedDifference, DiffRect, GameType } from "../types";
 import { CDN_BASE } from "../constants";
-import { matchmakingApi, roomApi } from "../network/rest";
+import { dailyApi, matchmakingApi, roomApi } from "../network/rest";
 import { RoomSocket } from "../network/ws";
 import { QueueSocket } from "../network/queueWs";
 
@@ -153,6 +153,16 @@ export class Game {
 
     const { roomCode } = await roomApi.create({ mode: "single" });
     await this.connectAndPlay(roomCode, "single");
+  }
+
+  // Start today's daily challenge. Same single-player capacity-1 flow as
+  // startSinglePlayer, but the room code is deterministic per (date, user)
+  // and the server enforces "1 attempt per day" via daily_attempts.
+  async startDailyChallenge(): Promise<void> {
+    await this.sceneManager.switchTo(LoadingScene);
+    if (!authState.isAuthenticated()) throw new Error("Not authenticated");
+    const { roomCode } = await dailyApi.start();
+    await this.connectAndPlay(roomCode, "daily");
   }
 
   // Create a new 1v1 room and share the code with a friend.

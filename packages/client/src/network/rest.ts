@@ -144,12 +144,46 @@ export const matchmakingApi = {
 };
 
 export const leaderboardApi = {
-  list(mode: "single" | "1v1", limit = 20, offset = 0): Promise<LeaderboardRes> {
+  list(
+    mode: "single" | "1v1" | "daily",
+    opts: { date?: string; limit?: number; offset?: number } = {},
+  ): Promise<LeaderboardRes> {
     const qs = new URLSearchParams({
       mode,
-      limit: String(limit),
-      offset: String(offset),
+      limit: String(opts.limit ?? 20),
+      offset: String(opts.offset ?? 0),
     });
+    if (opts.date) qs.set("date", opts.date);
     return request<LeaderboardRes>(`/leaderboard?${qs.toString()}`);
+  },
+};
+
+export interface DailyTodayRes {
+  date: string;
+  played: boolean;
+  result: {
+    elapsedMs: number | null;
+    foundCount: number;
+    outcome: string;
+  } | null;
+  streak: {
+    current: number;
+    longest: number;
+    lastDailyDate: string | null;
+  };
+}
+
+export interface DailyStartRes {
+  roomCode: string;
+  wsUrl: string;
+  date: string;
+}
+
+export const dailyApi = {
+  today(): Promise<DailyTodayRes> {
+    return request<DailyTodayRes>("/daily/today");
+  },
+  start(): Promise<DailyStartRes> {
+    return request<DailyStartRes>("/daily/start", { method: "POST" });
   },
 };
