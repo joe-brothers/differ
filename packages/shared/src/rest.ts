@@ -24,6 +24,37 @@ export const MeRes = z.object({
 });
 export type MeRes = z.infer<typeof MeRes>;
 
+// Per-user recent game history. The opponent slot is null for single-mode
+// runs and for matches whose other participant has been deleted.
+export const RecentGameOutcome = z.enum(["win", "loss", "timeout"]);
+export type RecentGameOutcome = z.infer<typeof RecentGameOutcome>;
+
+export const RecentGameOpponent = z.object({
+  userId: z.string(),
+  name: z.string(),
+  outcome: RecentGameOutcome,
+  elapsedMs: z.number().int().nonnegative().nullable(),
+  foundCount: z.number().int().nonnegative(),
+});
+export type RecentGameOpponent = z.infer<typeof RecentGameOpponent>;
+
+export const RecentGameEntry = z.object({
+  gameId: z.string(),
+  mode: GameMode,
+  endedAt: z.string(),
+  endReason: z.enum(["winner", "timeout"]),
+  outcome: RecentGameOutcome,
+  elapsedMs: z.number().int().nonnegative().nullable(),
+  foundCount: z.number().int().nonnegative(),
+  opponent: RecentGameOpponent.nullable(),
+});
+export type RecentGameEntry = z.infer<typeof RecentGameEntry>;
+
+export const RecentGamesRes = z.object({
+  games: z.array(RecentGameEntry),
+});
+export type RecentGamesRes = z.infer<typeof RecentGamesRes>;
+
 export const GuestReq = z.object({}).optional();
 
 // Password rules enforced both client-side (form validation) and server-side

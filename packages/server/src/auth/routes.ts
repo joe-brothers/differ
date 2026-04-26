@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import {
   LoginReq,
   LoginTotpReq,
@@ -9,10 +9,14 @@ import {
   TotpDisableReq,
   ForgotPasswordReq,
   SetEmailReq,
+  type GameMode,
+  type RecentGameEntry,
+  type RecentGameOutcome,
+  type RecentGamesRes,
 } from "@differ/shared";
 import type { Env } from "../env.js";
 import { getDb } from "../db/client.js";
-import { gameResults, users } from "../db/schema.js";
+import { gameParticipants, games, users } from "../db/schema.js";
 import { signToken, signTotpTicket, verifyTotpTicket } from "./jwt.js";
 import { hashPassword, verifyPassword, needsRehash } from "./password.js";
 import { requireAuth, type AuthEnv } from "./middleware.js";
@@ -223,8 +227,14 @@ protectedRoutes.get("/me", async (c) => {
   if (row.isGuest === 0) {
     const winsRow = await db
       .select({ c: sql<number>`COUNT(*)` })
-      .from(gameResults)
-      .where(and(eq(gameResults.userId, claims.sub), eq(gameResults.mode, "1v1")))
+      .from(gameParticipants)
+      .where(
+        and(
+          eq(gameParticipants.userId, claims.sub),
+          eq(gameParticipants.mode, "1v1"),
+          eq(gameParticipants.outcome, "win"),
+        ),
+      )
       .get();
     wins = winsRow?.c ?? 0;
   }
@@ -232,6 +242,93 @@ protectedRoutes.get("/me", async (c) => {
     user: { userId: row.id, name: row.name, isGuest: row.isGuest === 1 },
     wins,
   });
+});
+
+// Recent N games for the current user. Two queries: my participations
+// (with the parent game's end_reason), then opponent rows for any 1v1
+// gameIds, merged in JS. Guests get an empty list — same posture as the
+// wins counter — so history only surfaces post-upgrade.
+protectedRoutes.get("/me/recent", async (c) => {
+  const claims = c.get("user");
+  const limitRaw = Number(c.req.query("limit") ?? 20);
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, Math.trunc(limitRaw))) : 20;
+  const db = getDb(c.env.DB);
+
+  const userRow = await db
+    .select({ isGuest: users.isGuest })
+    .from(users)
+    .where(eq(users.id, claims.sub))
+    .get();
+  if (!userRow) {
+    return c.json({ error: { code: "not_found", message: "User gone" } }, 404);
+  }
+  if (userRow.isGuest === 1) {
+    const empty: RecentGamesRes = { games: [] };
+    return c.json(empty);
+  }
+
+  const mine = await db
+    .select({
+      gameId: gameParticipants.gameId,
+      mode: gameParticipants.mode,
+      outcome: gameParticipants.outcome,
+      elapsedMs: gameParticipants.elapsedMs,
+      foundCount: gameParticipants.foundCount,
+      endedAt: gameParticipants.endedAt,
+      endReason: games.endReason,
+    })
+    .from(gameParticipants)
+    .innerJoin(games, eq(games.id, gameParticipants.gameId))
+    .where(eq(gameParticipants.userId, claims.sub))
+    .orderBy(desc(gameParticipants.endedAt))
+    .limit(limit);
+
+  const versusGameIds = mine.filter((m) => m.mode === "1v1").map((m) => m.gameId);
+  const opponentRows = versusGameIds.length
+    ? await db
+        .select({
+          gameId: gameParticipants.gameId,
+          userId: gameParticipants.userId,
+          name: users.name,
+          outcome: gameParticipants.outcome,
+          elapsedMs: gameParticipants.elapsedMs,
+          foundCount: gameParticipants.foundCount,
+        })
+        .from(gameParticipants)
+        .innerJoin(users, eq(users.id, gameParticipants.userId))
+        .where(
+          and(
+            inArray(gameParticipants.gameId, versusGameIds),
+            ne(gameParticipants.userId, claims.sub),
+          ),
+        )
+    : [];
+  const opponentByGame = new Map<string, (typeof opponentRows)[number]>();
+  for (const o of opponentRows) opponentByGame.set(o.gameId, o);
+
+  const entries: RecentGameEntry[] = mine.map((m) => ({
+    gameId: m.gameId,
+    mode: m.mode as GameMode,
+    endedAt: m.endedAt,
+    endReason: m.endReason as "winner" | "timeout",
+    outcome: m.outcome as RecentGameOutcome,
+    elapsedMs: m.elapsedMs,
+    foundCount: m.foundCount,
+    opponent: (() => {
+      const o = opponentByGame.get(m.gameId);
+      if (!o) return null;
+      return {
+        userId: o.userId,
+        name: o.name,
+        outcome: o.outcome as RecentGameOutcome,
+        elapsedMs: o.elapsedMs,
+        foundCount: o.foundCount,
+      };
+    })(),
+  }));
+
+  const body: RecentGamesRes = { games: entries };
+  return c.json(body);
 });
 
 protectedRoutes.post("/upgrade", async (c) => {

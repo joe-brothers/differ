@@ -14,6 +14,7 @@ export class MainMenuScene extends Container implements IScene {
   private sprintButton: Container | null = null;
   private matchButton: Container | null = null;
   private leaderboardButton: Container | null = null;
+  private historyButton: Container | null = null;
   private usernameText: Text | null = null;
   private winsText: Text | null = null;
   private logoutText: Text | null = null;
@@ -32,6 +33,11 @@ export class MainMenuScene extends Container implements IScene {
     this.createSprintButton();
     this.createMatchButton();
     this.createLeaderboardButton();
+    // History affordance is registered-user only — guests' /me/recent always
+    // returns [] so the button would just lead to an empty card.
+    if (!authState.getUser()?.isGuest) {
+      this.createHistoryButton();
+    }
     this.createUserInfo();
     // Pull fresh stats (wins) so the counter reflects games played in the
     // last session — fire-and-forget so the menu still draws instantly.
@@ -184,6 +190,46 @@ export class MainMenuScene extends Container implements IScene {
     });
 
     this.addChild(this.leaderboardButton);
+  }
+
+  private createHistoryButton(): void {
+    const buttonWidth = 250;
+    const buttonHeight = 48;
+    const buttonX = this.app.screen.width / 2;
+    const buttonY = this.app.screen.height / 2 + 128;
+
+    this.historyButton = new Container();
+    this.historyButton.position.set(buttonX, buttonY);
+
+    const bg = new Graphics();
+    this.drawOutlinedButton(bg, buttonWidth, buttonHeight, COLORS.surface);
+
+    const text = new Text({
+      text: "History",
+      style: {
+        fontFamily: "Arial, sans-serif",
+        fontSize: 14,
+        fontWeight: "500",
+        fill: COLORS.primary,
+      },
+    });
+    text.anchor.set(0.5);
+
+    this.historyButton.addChild(bg, text);
+    this.historyButton.eventMode = "static";
+    this.historyButton.cursor = "pointer";
+
+    this.historyButton.on("pointerover", () => {
+      this.drawOutlinedButton(bg, buttonWidth, buttonHeight, COLORS.primarySoft);
+    });
+    this.historyButton.on("pointerout", () => {
+      this.drawOutlinedButton(bg, buttonWidth, buttonHeight, COLORS.surface);
+    });
+    this.historyButton.on("pointerdown", () => {
+      game.showHistory();
+    });
+
+    this.addChild(this.historyButton);
   }
 
   private formatWins(n: number): string {

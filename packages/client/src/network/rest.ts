@@ -6,6 +6,7 @@ import type {
   LoginReq,
   LoginTotpRequiredRes,
   MeRes,
+  RecentGamesRes,
   TotpSetupRes,
   TotpStatusRes,
   UpgradeReq,
@@ -77,6 +78,9 @@ export const authApi = {
   },
   me(): Promise<MeRes> {
     return request<MeRes>("/auth/me");
+  },
+  recent(limit = 20): Promise<RecentGamesRes> {
+    return request<RecentGamesRes>(`/auth/me/recent?limit=${limit}`);
   },
   logout(): Promise<{ ok: true }> {
     return request<{ ok: true }>("/auth/logout", { method: "POST" });

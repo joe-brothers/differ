@@ -33,22 +33,48 @@ export const puzzles = sqliteTable("puzzles", {
     .default(sql`(datetime('now'))`),
 });
 
-export const gameResults = sqliteTable(
-  "game_results",
+// One row per match. Captures end-reason so timeouts and legitimate wins
+// can be distinguished by analytics without re-deriving from outcomes.
+export const games = sqliteTable(
+  "games",
   {
     id: text("id").primaryKey(),
+    mode: text("mode").notNull(),
+    roomCode: text("room_code"),
+    startedAt: text("started_at"),
+    endedAt: text("ended_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    endReason: text("end_reason").notNull(),
+    winnerId: text("winner_id").references(() => users.id),
+  },
+  (t) => ({
+    endedIdx: index("idx_games_ended_at").on(t.endedAt),
+    modeEndedIdx: index("idx_games_mode_ended").on(t.mode, t.endedAt),
+  }),
+);
+
+// One row per player per match. `outcome='win'` is the leaderboard signal —
+// timeout-winners are marked 'timeout' so they don't earn leaderboard credit
+// (matches the prior winner-only behavior).
+export const gameParticipants = sqliteTable(
+  "game_participants",
+  {
+    gameId: text("game_id")
+      .notNull()
+      .references(() => games.id),
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
-    roomCode: text("room_code"),
     mode: text("mode").notNull(),
-    elapsedMs: integer("elapsed_ms").notNull(),
-    completedAt: text("completed_at")
-      .notNull()
-      .default(sql`(datetime('now'))`),
+    outcome: text("outcome").notNull(),
+    elapsedMs: integer("elapsed_ms"),
+    foundCount: integer("found_count").notNull().default(0),
+    endedAt: text("ended_at").notNull(),
   },
   (t) => ({
-    lbIdx: index("idx_game_results_lb").on(t.mode, t.elapsedMs),
-    userIdx: index("idx_game_results_user").on(t.userId),
+    userIdx: index("idx_gp_user_ended").on(t.userId, t.endedAt),
+    modeOutcomeIdx: index("idx_gp_mode_outcome").on(t.mode, t.outcome),
+    modeElapsedIdx: index("idx_gp_mode_elapsed").on(t.mode, t.elapsedMs),
   }),
 );

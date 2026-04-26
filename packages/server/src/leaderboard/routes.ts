@@ -3,12 +3,14 @@ import { and, asc, count, desc, eq, min } from "drizzle-orm";
 import { LeaderboardQuery, type LeaderboardRes } from "@differ/shared";
 import type { Env } from "../env.js";
 import { getDb } from "../db/client.js";
-import { gameResults, users } from "../db/schema.js";
+import { gameParticipants, users } from "../db/schema.js";
 
 export const leaderboardRoutes = new Hono<{ Bindings: Env }>();
 
-// A row in `game_results` represents a win (losers are never inserted), so
-// the leaderboard is a simple COUNT aggregation keyed by mode.
+// `game_participants` carries every player from every match. Filtering on
+// outcome='win' isolates legitimate completions (timeout-winners are stored
+// as 'timeout' so they don't earn leaderboard credit). For single mode each
+// participation is a 'win' on completion, so best_ms still ranks correctly.
 leaderboardRoutes.get("/", async (c) => {
   const parsed = LeaderboardQuery.safeParse({
     mode: c.req.query("mode"),
@@ -22,7 +24,7 @@ leaderboardRoutes.get("/", async (c) => {
 
   const db = getDb(c.env.DB);
   const wins = count().as("wins");
-  const bestMs = min(gameResults.elapsedMs).as("best_ms");
+  const bestMs = min(gameParticipants.elapsedMs).as("best_ms");
 
   // Single sprint is a time attack — rank by best completion time.
   // 1v1 is win-based — rank by wins, with best time as the tiebreaker.
@@ -35,11 +37,17 @@ leaderboardRoutes.get("/", async (c) => {
       wins,
       bestMs,
     })
-    .from(gameResults)
-    .innerJoin(users, eq(users.id, gameResults.userId))
+    .from(gameParticipants)
+    .innerJoin(users, eq(users.id, gameParticipants.userId))
     // Guests are excluded from the leaderboard. Their rows are still
     // persisted so they survive an account upgrade.
-    .where(and(eq(gameResults.mode, mode), eq(users.isGuest, 0)))
+    .where(
+      and(
+        eq(gameParticipants.mode, mode),
+        eq(gameParticipants.outcome, "win"),
+        eq(users.isGuest, 0),
+      ),
+    )
     .groupBy(users.id, users.name)
     .orderBy(...orderBy)
     .limit(limit)

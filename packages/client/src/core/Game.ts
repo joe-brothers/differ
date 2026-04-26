@@ -8,6 +8,7 @@ import { GameScene } from "../scenes/GameScene";
 import { LoadingScene } from "../scenes/LoadingScene";
 import { AuthScene } from "../scenes/AuthScene";
 import { LeaderboardScene } from "../scenes/LeaderboardScene";
+import { HistoryScene } from "../scenes/HistoryScene";
 import { MatchmakingScene } from "../scenes/MatchmakingScene";
 import type { ImageData, SelectedDifference, DiffRect, GameType } from "../types";
 import { CDN_BASE } from "../constants";
@@ -113,6 +114,10 @@ export class Game {
 
   async showLeaderboard(): Promise<void> {
     await this.sceneManager.switchTo(LeaderboardScene);
+  }
+
+  async showHistory(): Promise<void> {
+    await this.sceneManager.switchTo(HistoryScene);
   }
 
   async showMatchmaking(): Promise<void> {

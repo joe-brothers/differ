@@ -11,7 +11,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Env } from "../env.js";
 import { verifyToken } from "../auth/jwt.js";
 import { getDb } from "../db/client.js";
-import { gameResults, users } from "../db/schema.js";
+import { gameParticipants, games, users } from "../db/schema.js";
 import { buildRound, findHit, type RoundPuzzle } from "../puzzles/service.js";
 
 type RoomStatus = "waiting" | "in_progress" | "ended";
@@ -470,32 +470,51 @@ export class GameRoom implements DurableObject {
     this.room.status = "ended";
     this.room.winnerId = winnerId;
 
-    // Persist to leaderboard only on legitimate completions (all diffs
-    // found). A timeout winner found more than the loser but didn't finish
-    // the round, so they don't earn a leaderboard record.
-    if (reason === "winner") {
-      const rows: Array<typeof gameResults.$inferInsert> = [];
-      for (const p of Object.values(this.room.players)) {
-        if (p.elapsedMs == null && p.userId === winnerId && this.room.startedAt) {
-          p.elapsedMs = Date.now() - this.room.startedAt;
-        }
-        if (p.elapsedMs != null) {
-          rows.push({
-            id: crypto.randomUUID(),
-            userId: p.userId,
-            roomCode: this.room.code,
-            mode: this.room.mode,
-            elapsedMs: p.elapsedMs,
-          });
-        }
+    // Persist a `games` row plus one `game_participants` row per player for
+    // every ending — winners, losers, and timeouts. Outcome is 'win' only on
+    // a legitimate completion (reason==='winner') so leaderboard semantics
+    // match the prior behavior; timeout-winners get 'timeout' instead of
+    // 'win'. Guest rows are inserted too — read-side queries filter on
+    // users.isGuest=0 so a guest's history flows in automatically on upgrade.
+    if (this.room.startedAt && winnerId) {
+      const winner = this.room.players[winnerId];
+      if (winner && winner.elapsedMs == null) {
+        winner.elapsedMs = Date.now() - this.room.startedAt;
       }
-      if (rows.length > 0) {
-        // Guest rows are inserted too; the leaderboard / wins / opponent-stat
-        // queries filter on users.isGuest=0 at read time. This way a guest
-        // who upgrades inherits their prior plays automatically.
-        const db = getDb(this.env.DB);
-        await db.insert(gameResults).values(rows).run();
-      }
+    }
+    const endedAt = sqlDatetimeNow();
+    const startedAtSql = this.room.startedAt ? sqlDatetime(this.room.startedAt) : null;
+    const gameId = crypto.randomUUID();
+    const gameRow: typeof games.$inferInsert = {
+      id: gameId,
+      mode: this.room.mode,
+      roomCode: this.room.code,
+      startedAt: startedAtSql,
+      endedAt,
+      endReason: reason,
+      winnerId,
+    };
+    const participantRows: Array<typeof gameParticipants.$inferInsert> = [];
+    for (const p of Object.values(this.room.players)) {
+      let outcome: "win" | "loss" | "timeout";
+      if (reason === "timeout") outcome = "timeout";
+      else outcome = p.userId === winnerId ? "win" : "loss";
+      participantRows.push({
+        gameId,
+        userId: p.userId,
+        mode: this.room.mode,
+        outcome,
+        elapsedMs: p.elapsedMs ?? null,
+        foundCount: totalFound(p),
+        endedAt,
+      });
+    }
+    if (participantRows.length > 0) {
+      const db = getDb(this.env.DB);
+      await db.batch([
+        db.insert(games).values(gameRow),
+        db.insert(gameParticipants).values(participantRows),
+      ]);
     }
 
     // Report every player's elapsed time in the broadcast so losers can show
@@ -611,17 +630,18 @@ export class GameRoom implements DurableObject {
     if (userIds.length === 0) return out;
     const db = getDb(this.env.DB);
     const rows = await db
-      .select({ userId: gameResults.userId, c: sql<number>`COUNT(*)` })
-      .from(gameResults)
-      .innerJoin(users, eq(users.id, gameResults.userId))
+      .select({ userId: gameParticipants.userId, c: sql<number>`COUNT(*)` })
+      .from(gameParticipants)
+      .innerJoin(users, eq(users.id, gameParticipants.userId))
       .where(
         and(
-          eq(gameResults.mode, "1v1"),
-          inArray(gameResults.userId, userIds),
+          eq(gameParticipants.mode, "1v1"),
+          eq(gameParticipants.outcome, "win"),
+          inArray(gameParticipants.userId, userIds),
           eq(users.isGuest, 0),
         ),
       )
-      .groupBy(gameResults.userId)
+      .groupBy(gameParticipants.userId)
       .all();
     for (const r of rows) out.set(r.userId, Number(r.c) || 0);
     for (const id of userIds) if (!out.has(id)) out.set(id, 0);
@@ -668,4 +688,14 @@ function totalFound(p: StoredPlayer): number {
   let n = 0;
   for (const ids of Object.values(p.foundPerPuzzle)) n += ids.length;
   return n;
+}
+
+// Match the `datetime('now')` text format used by the rest of the schema:
+// 'YYYY-MM-DD HH:MM:SS' in UTC. Lexicographically sortable, consistent with
+// existing rows so range queries don't need to handle two formats.
+function sqlDatetime(ms: number): string {
+  return new Date(ms).toISOString().replace("T", " ").slice(0, 19);
+}
+function sqlDatetimeNow(): string {
+  return sqlDatetime(Date.now());
 }
