@@ -22,6 +22,10 @@ export interface SelectedDifference {
   diffIndex: number;
   rect: DiffRect;
   found: boolean;
+  // True when this diff was surfaced by a hint rather than a click. The
+  // marker is rendered in a muted color so the player can tell which ones
+  // they actually spotted vs. which the game gave them.
+  viaHint: boolean;
 }
 
 // Game mode types
@@ -52,6 +56,9 @@ export interface GameState {
   pausedAt: number | null;
   // Total milliseconds spent paused so far in this game.
   pausedMs: number;
+  // Daily-only running total of hints used in the current attempt. Mirrored
+  // into the UI store on every server `hint_revealed`.
+  hintsUsed: number;
 }
 
 // Scene interface

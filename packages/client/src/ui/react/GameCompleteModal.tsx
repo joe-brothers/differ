@@ -34,12 +34,17 @@ function buildShareText(args: {
   date: string;
   elapsedSec: number | null;
   foundCount: number;
+  hintsUsed: number;
 }): string {
   const result =
     args.elapsedSec != null
       ? formatTime(args.elapsedSec)
       : `${args.foundCount}/${TOTAL_DIFFS_PER_GAME}`;
-  return `Differ Daily ${args.date} — ${result}\n${window.location.origin}`;
+  // "Flawless" suffix is reserved for completed runs that didn't take a hint.
+  // Timeouts and hint-assisted finishes don't get the badge — the LinkedIn
+  // game-share style cue is meant to convey "no help, no shortcuts."
+  const flawless = args.hintsUsed === 0 && args.elapsedSec != null ? " (Flawless ✨)" : "";
+  return `Differ Daily ${args.date} — ${result}${flawless}\n${window.location.origin}`;
 }
 
 function DailyCompleteCard({
@@ -51,12 +56,14 @@ function DailyCompleteCard({
 }) {
   const [copied, setCopied] = useState(false);
   const completed = modal.elapsedSec != null;
+  const flawless = completed && modal.hintsUsed === 0;
 
   const onCopy = async () => {
     const text = buildShareText({
       date: modal.date,
       elapsedSec: modal.elapsedSec,
       foundCount: modal.foundCount,
+      hintsUsed: modal.hintsUsed,
     });
     try {
       await navigator.clipboard.writeText(text);
@@ -100,6 +107,29 @@ function DailyCompleteCard({
             ? formatTime(modal.elapsedSec ?? 0)
             : `${modal.foundCount}/${TOTAL_DIFFS_PER_GAME}`}
         </div>
+
+        {flawless && (
+          <div
+            style={{
+              marginTop: 4,
+              padding: "4px 12px",
+              borderRadius: 9999,
+              fontSize: 14,
+              fontWeight: 500,
+              color: CSS.gold,
+              backgroundColor: CSS.warningBg,
+            }}
+            title="No hints used — eligible for the daily leaderboard."
+          >
+            Flawless ✨
+          </div>
+        )}
+        {completed && !flawless && (
+          <div style={{ marginTop: 4, fontSize: 13, color: CSS.textSecondary }}>
+            {modal.hintsUsed} hint{modal.hintsUsed === 1 ? "" : "s"} used · streak kept, not on
+            leaderboard
+          </div>
+        )}
 
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
           <Button label={copied ? "Copied!" : "Copy Result"} color={CSS.primary} onClick={onCopy} />

@@ -165,6 +165,7 @@ export interface DailyTodayRes {
     elapsedMs: number | null;
     foundCount: number;
     outcome: string;
+    hintsUsed: number;
   } | null;
   streak: {
     current: number;

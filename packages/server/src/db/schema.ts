@@ -70,6 +70,9 @@ export const gameParticipants = sqliteTable(
     outcome: text("outcome").notNull(),
     elapsedMs: integer("elapsed_ms"),
     foundCount: integer("found_count").notNull().default(0),
+    // Daily hints used by this player in this game. Non-daily modes always 0.
+    // Daily leaderboard query filters `hintsUsed = 0` so hint runs don't rank.
+    hintsUsed: integer("hints_used").notNull().default(0),
     endedAt: text("ended_at").notNull(),
   },
   (t) => ({

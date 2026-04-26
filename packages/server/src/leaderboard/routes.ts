@@ -42,6 +42,12 @@ leaderboardRoutes.get("/", async (c) => {
     eq(gameParticipants.outcome, "win"),
     eq(users.isGuest, 0),
   ];
+  // Daily-only: hint-assisted runs are still valid completions (streak +1,
+  // history shows it) but don't compete on the public leaderboard. Hints are
+  // never available outside daily, so non-daily rows always have 0 here.
+  if (mode === "daily") {
+    filters.push(eq(gameParticipants.hintsUsed, 0));
+  }
   if (date) {
     // ended_at is stored as datetime('now') text — string-compare works
     // because the format is lexicographically ordered (YYYY-MM-DD HH:MM:SS).

@@ -1,6 +1,6 @@
 import { Container, Sprite, Graphics, Texture, FederatedPointerEvent } from "pixi.js";
 import type { SelectedDifference } from "../types";
-import { IMAGE_WIDTH, IMAGE_HEIGHT } from "../constants";
+import { IMAGE_WIDTH, IMAGE_HEIGHT, MARKER_COLOR, MARKER_HINT_COLOR } from "../constants";
 import { DiffMarker } from "./DiffMarker";
 
 export class ImagePanel extends Container {
@@ -57,8 +57,9 @@ export class ImagePanel extends Container {
       if (diff.found) {
         const centerX = diff.rect.start_point.x + diff.rect.width / 2;
         const centerY = diff.rect.start_point.y + diff.rect.height / 2;
+        const color = diff.viaHint ? MARKER_HINT_COLOR : MARKER_COLOR;
         // No animation for pre-existing markers
-        const marker = new DiffMarker(centerX, centerY, undefined, false);
+        const marker = new DiffMarker(centerX, centerY, undefined, false, color);
         this.markersContainer.addChild(marker);
       }
     }
@@ -71,8 +72,9 @@ export class ImagePanel extends Container {
 
     const centerX = diff.rect.start_point.x + diff.rect.width / 2;
     const centerY = diff.rect.start_point.y + diff.rect.height / 2;
+    const color = diff.viaHint ? MARKER_HINT_COLOR : MARKER_COLOR;
     // Animate the new marker
-    const marker = new DiffMarker(centerX, centerY, undefined, true);
+    const marker = new DiffMarker(centerX, centerY, undefined, true, color);
     this.markersContainer.addChild(marker);
   }
 

@@ -27,6 +27,10 @@ export type OverlayModal =
       foundCount: number;
       // UTC date this attempt was for (YYYY-MM-DD). Used in the share text.
       date: string;
+      // # hints used in this attempt. 0 → render the Flawless badge in the
+      // share text and on the modal; >0 → omit it (the run is still a clear,
+      // streak-keeping completion, just not a leaderboard one).
+      hintsUsed: number;
     };
 
 interface UIStore {
@@ -40,6 +44,11 @@ interface UIStore {
   opponentWins: number;
   gameType: GameType;
   timerSec: number;
+  // Daily-only HUD state. `hintCooldownUntilMs` is wall-clock; the Hint button
+  // re-enables itself once Date.now() passes it. `hintsUsed` is purely
+  // informational so other UI (the Flawless badge) can read a single source.
+  hintsUsed: number;
+  hintCooldownUntilMs: number;
 
   // Overlay modal state
   modal: OverlayModal;
@@ -85,7 +94,11 @@ interface UIStore {
     elapsedSec: number | null;
     foundCount: number;
     date: string;
+    hintsUsed: number;
   }) => void;
+  // Daily-only: server-acknowledged hint reveal. Records the cooldown and
+  // bumps the running total — both are displayed by the HUD button.
+  recordHintUsed: (cooldownMs: number, hintsUsed: number) => void;
   markRematchPending: () => void;
   markOpponentRematch: () => void;
 
@@ -103,6 +116,8 @@ export const useUIStore = create<UIStore>((set) => ({
   opponentWins: 0,
   gameType: "single",
   timerSec: 0,
+  hintsUsed: 0,
+  hintCooldownUntilMs: 0,
   modal: { type: "none" },
   rematchPending: false,
   opponentRematch: false,
@@ -120,6 +135,11 @@ export const useUIStore = create<UIStore>((set) => ({
       opponentWins: s.opponentWins,
       gameType: s.gameType,
       timerSec: 0,
+      hintsUsed: s.hintsUsed,
+      // Reconnect mid-cooldown is rare enough that the welcome payload doesn't
+      // ship a remaining-cooldown value; the worst case is the user gets to
+      // hint a touch sooner than they otherwise would have.
+      hintCooldownUntilMs: 0,
       modal: { type: "none" },
       rematchPending: false,
       opponentRematch: false,
@@ -161,11 +181,16 @@ export const useUIStore = create<UIStore>((set) => ({
       rematchPending: false,
       opponentRematch: false,
     }),
-  showCompleteDaily: ({ elapsedSec, foundCount, date }) =>
+  showCompleteDaily: ({ elapsedSec, foundCount, date, hintsUsed }) =>
     set({
-      modal: { type: "complete-daily", elapsedSec, foundCount, date },
+      modal: { type: "complete-daily", elapsedSec, foundCount, date, hintsUsed },
       rematchPending: false,
       opponentRematch: false,
+    }),
+  recordHintUsed: (cooldownMs, hintsUsed) =>
+    set({
+      hintsUsed,
+      hintCooldownUntilMs: Date.now() + cooldownMs,
     }),
   markRematchPending: () => set({ rematchPending: true }),
   markOpponentRematch: () => set({ opponentRematch: true }),

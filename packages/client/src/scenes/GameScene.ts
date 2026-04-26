@@ -8,6 +8,8 @@ import {
   WRONG_CLICK_COOLDOWN_MS,
   IMAGES_PER_GAME,
   COLORS,
+  MARKER_COLOR,
+  MARKER_HINT_COLOR,
 } from "../constants";
 import { gameState } from "../managers/GameStateManager";
 import { authState } from "../managers/AuthStateManager";
@@ -69,6 +71,7 @@ export class GameScene extends Container implements IScene {
   private offPlayerOffline?: () => void;
   private offPlayerOnline?: () => void;
   private offPlayerReady?: () => void;
+  private offHintRevealed?: () => void;
   private offKeyDown?: () => void;
 
   constructor(app: Application) {
@@ -272,7 +275,13 @@ export class GameScene extends Container implements IScene {
 
     const onEnd = (msg: {
       winnerId: string | null;
-      results: { userId: string; name: string; elapsedMs: number | null; foundCount: number }[];
+      results: {
+        userId: string;
+        name: string;
+        elapsedMs: number | null;
+        foundCount: number;
+        hintsUsed: number;
+      }[];
     }) => {
       this.gameEnded = true;
       const state = gameState.getState();
@@ -317,6 +326,7 @@ export class GameScene extends Container implements IScene {
           elapsedSec: msg.winnerId === myId ? myElapsedSec : null,
           foundCount: mine?.foundCount ?? state.foundCount,
           date: new Date().toISOString().slice(0, 10),
+          hintsUsed: mine?.hintsUsed ?? state.hintsUsed,
         });
       } else {
         ui.showCompleteSingle(myElapsedSec);
@@ -348,18 +358,37 @@ export class GameScene extends Container implements IScene {
       this.setOpponentOnline(true);
     };
 
+    const onHintRevealed = (msg: {
+      userId: string;
+      puzzleIdx: number;
+      diffId: string;
+      foundCount: number;
+      hintsUsed: number;
+      cooldownMs: number;
+    }) => {
+      // Hint is scoped to the puzzle the player was viewing when they asked,
+      // so no navigation is needed. `viaHint=true` tells the renderers to use
+      // the muted marker color so spotted diffs stay visually distinct.
+      if (msg.userId !== myId) return;
+      gameState.markDifferenceFoundById(msg.puzzleIdx, msg.diffId, true);
+      gameState.recordHintUsed(msg.hintsUsed);
+      useUIStore.getState().recordHintUsed(msg.cooldownMs, msg.hintsUsed);
+    };
+
     socket.on("click_result", onClick);
     socket.on("game_end", onEnd);
     socket.on("player_left", onLeft);
     socket.on("player_offline", onOffline);
     socket.on("player_online", onOnline);
     socket.on("player_ready", onPlayerReady);
+    socket.on("hint_revealed", onHintRevealed);
     this.offClickResult = () => socket.off("click_result", onClick);
     this.offGameEnd = () => socket.off("game_end", onEnd);
     this.offPlayerLeft = () => socket.off("player_left", onLeft);
     this.offPlayerOffline = () => socket.off("player_offline", onOffline);
     this.offPlayerOnline = () => socket.off("player_online", onOnline);
     this.offPlayerReady = () => socket.off("player_ready", onPlayerReady);
+    this.offHintRevealed = () => socket.off("hint_revealed", onHintRevealed);
   }
 
   private setupKeyboardShortcuts(): void {
@@ -498,7 +527,8 @@ export class GameScene extends Container implements IScene {
       if (diff.found) {
         const centerX = diff.rect.start_point.x + diff.rect.width / 2;
         const centerY = diff.rect.start_point.y + diff.rect.height / 2;
-        const marker = new DiffMarker(centerX, centerY, undefined, false);
+        const color = diff.viaHint ? MARKER_HINT_COLOR : MARKER_COLOR;
+        const marker = new DiffMarker(centerX, centerY, undefined, false, color);
         this.rightMarkersContainer.addChild(marker);
       }
     }
@@ -514,7 +544,8 @@ export class GameScene extends Container implements IScene {
 
     this.leftPanel?.addMarkerForDiff(diffIndex);
 
-    const marker = new DiffMarker(centerX, centerY, undefined, true);
+    const color = diff.viaHint ? MARKER_HINT_COLOR : MARKER_COLOR;
+    const marker = new DiffMarker(centerX, centerY, undefined, true, color);
     this.rightMarkersContainer.addChild(marker);
   }
 
@@ -594,6 +625,7 @@ export class GameScene extends Container implements IScene {
     this.offPlayerOffline?.();
     this.offPlayerOnline?.();
     this.offPlayerReady?.();
+    this.offHintRevealed?.();
     this.offKeyDown?.();
     for (const off of this.offStateListeners) off();
     this.offStateListeners = [];

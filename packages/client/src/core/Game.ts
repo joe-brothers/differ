@@ -322,6 +322,7 @@ export class Game {
       welcome.startedAt,
       myFoundCount,
       opponentCount,
+      welcome.yourHintsUsed ?? 0,
     );
     writeActiveRoom(roomCode, gameType);
     await this.sceneManager.switchTo(GameScene);
@@ -369,6 +370,7 @@ export class Game {
         diffIndex,
         rect,
         found: false,
+        viaHint: false,
       })),
     );
   }

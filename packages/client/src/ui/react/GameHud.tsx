@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { useUIStore } from "../store";
+import { game } from "../../core/Game";
 import { CSS, FONT_FAMILY, FONT_MONO, RADIUS, SHADOW } from "../styles";
 import { IMAGES_PER_GAME, TOTAL_DIFFS_PER_GAME, UI_PADDING } from "../../constants";
 
@@ -122,6 +124,77 @@ export function GameHud() {
           {!opponentOnline && <span style={{ color: CSS.error }}>(Disconnected)</span>}
         </div>
       )}
+
+      {gameType === "daily" && <HintButton />}
     </div>
+  );
+}
+
+// Daily-only Hint affordance. Below the timer in the top-left so it doesn't
+// fight with the menu icon on the right. The cooldown is server-enforced,
+// so the button just disables itself optimistically and re-enables on tick.
+function HintButton() {
+  const hintsUsed = useUIStore((s) => s.hintsUsed);
+  const cooldownUntil = useUIStore((s) => s.hintCooldownUntilMs);
+  const currentImageIndex = useUIStore((s) => s.currentImageIndex);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, []);
+
+  const remainingMs = Math.max(0, cooldownUntil - now);
+  const onCooldown = remainingMs > 0;
+  const remainingSec = Math.ceil(remainingMs / 1000);
+
+  const onClick = () => {
+    if (onCooldown) return;
+    // Hint is scoped to the puzzle the player is currently looking at, so
+    // pages they've already cleared don't keep getting picked at random.
+    game.getSocket()?.send({ kind: "hint", puzzleIdx: currentImageIndex });
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={onCooldown}
+      style={{
+        position: "absolute",
+        top: UI_PADDING + 48,
+        left: UI_PADDING,
+        pointerEvents: "auto",
+        background: onCooldown ? CSS.surfaceMuted : CSS.surface,
+        color: onCooldown ? CSS.textSecondary : CSS.primary,
+        border: `1px solid ${CSS.border}`,
+        borderRadius: RADIUS.pill,
+        padding: "8px 14px",
+        boxShadow: SHADOW.s1,
+        fontFamily: FONT_FAMILY,
+        fontSize: 14,
+        fontWeight: 500,
+        lineHeight: 1,
+        cursor: onCooldown ? "not-allowed" : "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+      }}
+      title={
+        onCooldown
+          ? `Available in ${remainingSec}s`
+          : "Reveal one difference. Hint runs are excluded from the daily leaderboard."
+      }
+    >
+      <span aria-hidden style={{ fontSize: 16 }}>
+        💡
+      </span>
+      <span>{onCooldown ? `Hint (${remainingSec}s)` : "Hint"}</span>
+      {hintsUsed > 0 && (
+        <span style={{ color: CSS.textSecondary, fontSize: 12, fontWeight: 400 }}>
+          · used {hintsUsed}
+        </span>
+      )}
+    </button>
   );
 }

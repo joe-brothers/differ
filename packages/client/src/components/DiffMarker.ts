@@ -4,11 +4,17 @@ import { MARKER_RADIUS, MARKER_COLOR, MARKER_STROKE_WIDTH } from "../constants";
 // Three concentric strokes from outside in:
 // 1. Soft dark halo — adds a "shadow" silhouette so the ring still reads on
 //    near-white image regions.
-// 2. White halo — separates the red ring from the underlying image so it
-//    stays visible when the underlying pixels are red themselves.
-// 3. Red ring — the actual marker.
+// 2. White halo — separates the ring from the underlying image so it stays
+//    visible when the underlying pixels happen to share its color.
+// 3. The actual ring (red for spotted diffs, gray for hint-revealed ones).
 export class DiffMarker extends Graphics {
-  constructor(x: number, y: number, radius: number = MARKER_RADIUS, animate: boolean = true) {
+  constructor(
+    x: number,
+    y: number,
+    radius: number = MARKER_RADIUS,
+    animate: boolean = true,
+    color: number = MARKER_COLOR,
+  ) {
     super();
 
     this.circle(0, 0, radius);
@@ -26,7 +32,7 @@ export class DiffMarker extends Graphics {
     });
 
     this.circle(0, 0, radius);
-    this.stroke({ color: MARKER_COLOR, width: MARKER_STROKE_WIDTH });
+    this.stroke({ color, width: MARKER_STROKE_WIDTH });
 
     this.position.set(x, y);
 

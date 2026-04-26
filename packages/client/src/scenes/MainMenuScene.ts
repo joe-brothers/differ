@@ -12,6 +12,8 @@ export class MainMenuScene extends Container implements IScene {
   private app: Application;
   private title: Text | null = null;
   private dailyButton: Container | null = null;
+  private dailyInfo: Container | null = null;
+  private dailyTooltip: Container | null = null;
   private sprintButton: Container | null = null;
   private matchButton: Container | null = null;
   private leaderboardButton: Container | null = null;
@@ -34,6 +36,7 @@ export class MainMenuScene extends Container implements IScene {
   async init(): Promise<void> {
     this.createTitle();
     this.createDailyButton();
+    this.createDailyInfo();
     this.createSprintButton();
     this.createMatchButton();
     this.createLeaderboardButton();
@@ -135,6 +138,147 @@ export class MainMenuScene extends Container implements IScene {
 
   private isDailyDisabled(): boolean {
     return !!this.dailyToday?.played;
+  }
+
+  // (i) icon next to the Daily button. Hover surfaces a small tooltip card
+  // explaining the hint affordance + Flawless flag — the share text and HUD
+  // both reference these terms, so users need somewhere to learn them.
+  private createDailyInfo(): void {
+    this.dailyInfo = new Container();
+    this.dailyInfo.eventMode = "static";
+    this.dailyInfo.cursor = "help";
+
+    const radius = 11;
+    const bg = new Graphics();
+    bg.circle(0, 0, radius);
+    bg.fill({ color: COLORS.surface });
+    bg.stroke({ color: COLORS.border, width: 1 });
+    this.dailyInfo.addChild(bg);
+
+    const label = new Text({
+      text: "i",
+      style: {
+        fontFamily: "Georgia, serif",
+        fontStyle: "italic",
+        fontSize: 14,
+        fontWeight: "500",
+        fill: COLORS.textSecondary,
+      },
+    });
+    label.anchor.set(0.5);
+    this.dailyInfo.addChild(label);
+
+    this.dailyInfo.on("pointerover", () => {
+      bg.clear();
+      bg.circle(0, 0, radius);
+      bg.fill({ color: COLORS.primarySoft });
+      bg.stroke({ color: COLORS.primary, width: 1 });
+      label.style.fill = COLORS.primary;
+      this.showDailyTooltip();
+    });
+    this.dailyInfo.on("pointerout", () => {
+      bg.clear();
+      bg.circle(0, 0, radius);
+      bg.fill({ color: COLORS.surface });
+      bg.stroke({ color: COLORS.border, width: 1 });
+      label.style.fill = COLORS.textSecondary;
+      this.hideDailyTooltip();
+    });
+
+    this.positionDailyInfo();
+    this.addChild(this.dailyInfo);
+  }
+
+  // Anchored just to the right of the Daily button. Re-derived on resize.
+  private positionDailyInfo(): void {
+    if (!this.dailyInfo) return;
+    const buttonHalfWidth = 250 / 2;
+    const x = this.app.screen.width / 2 + buttonHalfWidth + 18;
+    const y = this.dailyButtonY();
+    this.dailyInfo.position.set(x, y);
+    if (this.dailyTooltip) this.positionDailyTooltip();
+  }
+
+  private showDailyTooltip(): void {
+    if (this.dailyTooltip || !this.dailyInfo) return;
+
+    const lines = [
+      "Hint",
+      "• Reveals one difference on the page you're viewing.",
+      "• 10 s cooldown between hints.",
+      "• Hint markers are gray instead of red.",
+      "• Using a hint still counts as a clear and keeps your streak.",
+      "",
+      "Flawless",
+      "• Finishing without any hint earns a Flawless ✨ badge",
+      "  in your shared result.",
+      "• Only Flawless runs appear on the daily leaderboard.",
+    ];
+
+    const padding = 14;
+    const lineHeight = 18;
+    const wrap = new Container();
+    wrap.eventMode = "none";
+
+    const texts: Text[] = [];
+    let maxWidth = 0;
+    for (const line of lines) {
+      const isHeading = line === "Hint" || line === "Flawless";
+      const t = new Text({
+        text: line,
+        style: {
+          fontFamily: "Arial, sans-serif",
+          fontSize: isHeading ? 13 : 12,
+          fontWeight: isHeading ? "600" : "400",
+          fill: isHeading ? COLORS.text : COLORS.textSecondary,
+          wordWrap: false,
+        },
+      });
+      texts.push(t);
+      maxWidth = Math.max(maxWidth, t.width);
+    }
+
+    const cardWidth = Math.ceil(maxWidth) + padding * 2;
+    const cardHeight = lineHeight * lines.length + padding * 2 - 4;
+
+    const bg = new Graphics();
+    bg.roundRect(0, 0, cardWidth, cardHeight, 8);
+    bg.fill({ color: COLORS.surface });
+    bg.stroke({ color: COLORS.border, width: 1 });
+    wrap.addChild(bg);
+
+    let y = padding - 2;
+    for (const t of texts) {
+      t.position.set(padding, y);
+      wrap.addChild(t);
+      y += lineHeight;
+    }
+
+    this.dailyTooltip = wrap;
+    this.addChild(wrap);
+    this.positionDailyTooltip();
+  }
+
+  private positionDailyTooltip(): void {
+    if (!this.dailyTooltip || !this.dailyInfo) return;
+    // Align to the right of the (i) icon when there's room; otherwise drop
+    // it below so it doesn't run off-screen on narrow viewports.
+    const margin = 12;
+    const tooltipWidth = this.dailyTooltip.width;
+    const desiredX = this.dailyInfo.x + 16;
+    const x =
+      desiredX + tooltipWidth + margin > this.app.screen.width
+        ? this.dailyInfo.x - tooltipWidth - 16
+        : desiredX;
+    const y = this.dailyInfo.y - this.dailyTooltip.height / 2;
+    this.dailyTooltip.position.set(x, Math.max(margin, y));
+  }
+
+  private hideDailyTooltip(): void {
+    if (!this.dailyTooltip) return;
+    this.removeChild(this.dailyTooltip);
+    this.dailyTooltip.destroy({ children: true });
+    this.dailyTooltip = null;
   }
 
   // Daily button sits above the existing 4-button stack. 56px button-to-button
@@ -903,6 +1047,9 @@ export class MainMenuScene extends Container implements IScene {
     if (this.dailyButton) {
       this.dailyButton.position.set(width / 2, this.dailyButtonY());
     }
+    if (this.dailyInfo) {
+      this.positionDailyInfo();
+    }
     if (this.sprintButton) {
       this.sprintButton.position.set(width / 2, this.sprintButtonY());
     }
@@ -945,6 +1092,7 @@ export class MainMenuScene extends Container implements IScene {
     this.upgradeOverlay = null;
     this.settingsOverlay?.destroy();
     this.settingsOverlay = null;
+    this.hideDailyTooltip();
     this.removeAllListeners();
     super.destroy({ children: true });
   }

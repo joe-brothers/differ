@@ -25,6 +25,9 @@ export const WRONG_CLICK_COOLDOWN_MS = 1000;
 export const MARKER_RADIUS = 25;
 // Chromium "danger" red — used as the diff marker stroke for status alignment.
 export const MARKER_COLOR = 0xd93025;
+// Muted Chromium gray — applied to diffs revealed by a daily Hint so the
+// player can tell at a glance which ones they actually spotted.
+export const MARKER_HINT_COLOR = 0x80868b;
 export const MARKER_STROKE_WIDTH = 4;
 
 // UI Colors — Pixi side mirror of CSS tokens in src/ui/styles.ts.

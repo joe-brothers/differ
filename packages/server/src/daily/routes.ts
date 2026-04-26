@@ -56,6 +56,7 @@ dailyRoutes.get("/today", requireAuth, async (c) => {
     elapsedMs: number | null;
     foundCount: number;
     outcome: string;
+    hintsUsed: number;
   } | null = null;
   if (attemptRow) {
     const [participant] = await db
@@ -63,6 +64,7 @@ dailyRoutes.get("/today", requireAuth, async (c) => {
         elapsedMs: gameParticipants.elapsedMs,
         foundCount: gameParticipants.foundCount,
         outcome: gameParticipants.outcome,
+        hintsUsed: gameParticipants.hintsUsed,
       })
       .from(gameParticipants)
       .where(
@@ -83,6 +85,7 @@ dailyRoutes.get("/today", requireAuth, async (c) => {
         elapsedMs: null,
         foundCount: 0,
         outcome: game?.endReason === "winner" ? "win" : "timeout",
+        hintsUsed: 0,
       };
     }
   }

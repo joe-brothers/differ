@@ -25,6 +25,11 @@ interface StoredPlayer {
   ready: boolean;
   foundPerPuzzle: Record<number, string[]>; // puzzleIdx -> diffIds
   elapsedMs: number | null;
+  // Daily-only: # of hints used and the wall-clock at which the next hint is
+  // allowed. `lastHintAt` lives in the persisted room so the cooldown survives
+  // DO hibernation (a user can't dodge the cooldown by reloading).
+  hintsUsed: number;
+  lastHintAt: number | null;
 }
 
 interface StoredRoom {
@@ -52,6 +57,10 @@ interface SocketAttachment {
 
 const ROOM_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
 const GAME_TIMEOUT_MS = 10 * 60 * 1000; // 10 min hard cap
+// Per-player wait between hint requests in daily mode. Keeps the affordance
+// helpful without trivializing the puzzle (you can't hint-spam through five
+// puzzles in seconds).
+const HINT_COOLDOWN_MS = 10_000;
 // Delay between game_start broadcast and actual play start, to cover
 // per-client image loading + countdown so both clients begin at the same
 // wall-clock moment. The client counts down to `startedAt`.
@@ -167,6 +176,9 @@ export class GameRoom implements DurableObject {
         break;
       case "click":
         await this.handleClick(attachment.userId, msg.puzzleIdx, msg.x, msg.y);
+        break;
+      case "hint":
+        await this.handleHint(ws, attachment.userId, msg.puzzleIdx);
         break;
       case "leave":
         // Just close the socket; webSocketClose handles state transitions
@@ -338,6 +350,8 @@ export class GameRoom implements DurableObject {
         ready: false,
         foundPerPuzzle: {},
         elapsedMs: null,
+        hintsUsed: 0,
+        lastHintAt: null,
       };
     }
 
@@ -485,6 +499,65 @@ export class GameRoom implements DurableObject {
     await this.persist();
   }
 
+  // Daily-only "give me one" affordance. Reveals one unfound diff on the
+  // puzzle the requester is currently viewing — scoped to that page so the
+  // hint actually helps them where they're stuck. The act of using a hint is
+  // recorded so the leaderboard query can exclude the attempt
+  // (`hints_used > 0` filter).
+  private async handleHint(ws: WebSocket, userId: string, puzzleIdx: number): Promise<void> {
+    if (!this.room || this.room.status !== "in_progress" || !this.room.puzzles) return;
+    if (this.room.mode !== "daily") return; // hints are a daily-only affordance
+    if (this.room.startedAt && Date.now() < this.room.startedAt) return;
+    const player = this.room.players[userId];
+    if (!player || player.elapsedMs !== null) return;
+
+    const round = this.room.puzzles[puzzleIdx];
+    if (!round) return;
+
+    const now = Date.now();
+    if (player.lastHintAt != null && now - player.lastHintAt < HINT_COOLDOWN_MS) {
+      // Client UI should already gate this; the server enforces it as a
+      // last-line defense in case the button gets clicked through.
+      this.sendError(ws, "hint_cooldown", "Hint is on cooldown");
+      return;
+    }
+
+    // Restrict candidates to the current puzzle's unfound diffs. If the
+    // current puzzle is already complete, no-op silently — the client should
+    // navigate to a remaining puzzle before requesting another hint.
+    const found = new Set(player.foundPerPuzzle[puzzleIdx] ?? []);
+    const candidates = round.selectedDiffIds.filter((id) => !found.has(id));
+    if (candidates.length === 0) return;
+
+    const pickedId = candidates[Math.floor(Math.random() * candidates.length)]!;
+    const list = player.foundPerPuzzle[puzzleIdx] ?? [];
+    list.push(pickedId);
+    player.foundPerPuzzle[puzzleIdx] = list;
+    player.hintsUsed += 1;
+    player.lastHintAt = now;
+
+    const foundCount = totalFound(player);
+    this.broadcast({
+      kind: "hint_revealed",
+      userId,
+      puzzleIdx,
+      diffId: pickedId,
+      foundCount,
+      hintsUsed: player.hintsUsed,
+      cooldownMs: HINT_COOLDOWN_MS,
+    });
+
+    const target = PUZZLES_PER_GAME * DIFFS_PER_PUZZLE;
+    if (foundCount >= target) {
+      player.elapsedMs = this.room.startedAt ? Date.now() - this.room.startedAt : 0;
+      await this.endGame(userId, "winner");
+      return;
+    }
+
+    this.bumpActivity();
+    await this.persist();
+  }
+
   private async endGame(winnerId: string | null, reason: EndReason): Promise<void> {
     if (!this.room) return;
     this.room.status = "ended";
@@ -530,6 +603,7 @@ export class GameRoom implements DurableObject {
         outcome,
         elapsedMs: p.elapsedMs ?? null,
         foundCount: totalFound(p),
+        hintsUsed: p.hintsUsed,
         endedAt,
       });
     }
@@ -579,6 +653,7 @@ export class GameRoom implements DurableObject {
         name: p.name,
         elapsedMs: p.elapsedMs ?? gameElapsedMs,
         foundCount: totalFound(p),
+        hintsUsed: p.hintsUsed,
       })),
     });
 
@@ -588,6 +663,8 @@ export class GameRoom implements DurableObject {
       p.ready = false;
       p.foundPerPuzzle = {};
       p.elapsedMs = null;
+      p.hintsUsed = 0;
+      p.lastHintAt = null;
     }
     this.room.status = "waiting";
     this.room.puzzles = null;
@@ -642,6 +719,7 @@ export class GameRoom implements DurableObject {
       startedAt: this.room.startedAt ?? undefined,
       yourFound: yourFound.length > 0 ? yourFound : undefined,
       progress: progress.length > 0 ? progress : undefined,
+      yourHintsUsed: this.room.mode === "daily" ? you.hintsUsed : undefined,
     };
   }
 

@@ -26,6 +26,7 @@ export class GameStateManager extends EventEmitter {
       opponentWins: 0,
       pausedAt: null,
       pausedMs: 0,
+      hintsUsed: 0,
     };
   }
 
@@ -46,6 +47,7 @@ export class GameStateManager extends EventEmitter {
     serverStartedAt: number,
     existingFoundCount: number = 0,
     existingOpponentCount: number = 0,
+    existingHintsUsed: number = 0,
   ): void {
     const prevOpponentName = this.state.opponentUsername;
     const prevOpponentWins = this.state.opponentWins;
@@ -64,16 +66,20 @@ export class GameStateManager extends EventEmitter {
       opponentWins: prevOpponentWins,
       pausedAt: null,
       pausedMs: 0,
+      hintsUsed: existingHintsUsed,
     };
     this.emit("gameInitialized");
   }
 
   // Mark a difference as found locally (called after server confirms).
-  markDifferenceFound(imageIndex: number, diffIndex: number): void {
+  // `viaHint` flags the diff so the marker can render in a muted color, and
+  // so post-game UI can distinguish hinted vs. spotted diffs.
+  markDifferenceFound(imageIndex: number, diffIndex: number, viaHint = false): void {
     const diff = this.state.selectedDifferences[imageIndex]?.[diffIndex];
     if (!diff || diff.found) return;
 
     diff.found = true;
+    diff.viaHint = viaHint;
     this.state.foundCount++;
     this.emit("differenceFound", {
       imageIndex,
@@ -96,16 +102,21 @@ export class GameStateManager extends EventEmitter {
   markDifferenceFoundById(
     puzzleIndex: number,
     differenceId: string,
+    viaHint = false,
   ): { imageIndex: number; diffIndex: number } | null {
     const diffs = this.state.selectedDifferences[puzzleIndex];
     if (!diffs) return null;
     for (let i = 0; i < diffs.length; i++) {
       if (diffs[i].rect.id === differenceId && !diffs[i].found) {
-        this.markDifferenceFound(puzzleIndex, i);
+        this.markDifferenceFound(puzzleIndex, i, viaHint);
         return { imageIndex: puzzleIndex, diffIndex: i };
       }
     }
     return null;
+  }
+
+  recordHintUsed(total: number): void {
+    this.state.hintsUsed = total;
   }
 
   handleOpponentDifferenceFound(count?: number): void {
