@@ -22,15 +22,15 @@
     "qrcode": "1.5.4",
     "react": "19.2.5",
     "react-dom": "19.2.5",
-    "zod": "3.25.76",
+    "zod": "4.3.6",
     "zustand": "5.0.12"
   },
   "devDependencies": {
     "@types/canvas-confetti": "1.9.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react-swc": "3.11.0",
-    "typescript": "5.9.3",
-    "vite": "7.3.2"
+    "@vitejs/plugin-react-swc": "4.3.0",
+    "typescript": "6.0.3",
+    "vite": "8.0.8"
   }
 }
