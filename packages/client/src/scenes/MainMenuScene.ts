@@ -27,6 +27,7 @@ export class MainMenuScene extends Container implements IScene {
   private logoutText: Text | null = null;
   private upgradeText: Text | null = null;
   private settingsText: Text | null = null;
+  private footerText: Text | null = null;
   private upgradeOverlay: HtmlOverlay | null = null;
   private settingsOverlay: HtmlOverlay | null = null;
   private dailyToday: DailyTodayRes | null = null;
@@ -49,6 +50,7 @@ export class MainMenuScene extends Container implements IScene {
       this.createHistoryButton();
     }
     this.createUserInfo();
+    this.createFooter();
     // Pull fresh stats (wins) so the counter reflects games played in the
     // last session — fire-and-forget so the menu still draws instantly.
     void authState.refresh().then(() => this.refreshUserInfo());
@@ -656,6 +658,40 @@ export class MainMenuScene extends Container implements IScene {
     this.addChild(this.logoutText);
   }
 
+  private createFooter(): void {
+    const sha = __GIT_SHA__;
+    const label = sha
+      ? `github.com/joe-brothers/differ (${sha})`
+      : "github.com/joe-brothers/differ";
+    this.footerText = new Text({
+      text: label,
+      style: {
+        fontFamily: "Arial, sans-serif",
+        fontSize: 12,
+        fill: COLORS.textSecondary,
+      },
+    });
+    this.footerText.anchor.set(0.5, 1);
+    this.footerText.eventMode = "static";
+    this.footerText.cursor = "pointer";
+    this.footerText.on("pointerover", () => {
+      if (this.footerText) this.footerText.style.fill = COLORS.text;
+    });
+    this.footerText.on("pointerout", () => {
+      if (this.footerText) this.footerText.style.fill = COLORS.textSecondary;
+    });
+    this.footerText.on("pointerdown", () => {
+      window.open("https://github.com/joe-brothers/differ", "_blank", "noopener,noreferrer");
+    });
+    this.positionFooter();
+    this.addChild(this.footerText);
+  }
+
+  private positionFooter(): void {
+    if (!this.footerText) return;
+    this.footerText.position.set(this.app.screen.width / 2, this.app.screen.height - 16);
+  }
+
   private openUpgradeModal(): void {
     this.upgradeOverlay?.destroy();
     this.upgradeOverlay = new HtmlOverlay();
@@ -752,16 +788,18 @@ export class MainMenuScene extends Container implements IScene {
         return;
       }
       overlay.setButtonEnabled(submitBtn, false);
-      submitBtn.textContent = "Saving...";
+      const stopDots = overlay.animateButtonDots(submitBtn, "Saving");
       errorText.textContent = "";
       try {
         await authState.upgrade(username, password);
+        stopDots();
         this.upgradeOverlay?.destroy();
         this.upgradeOverlay = null;
         // Refresh the menu so the upgrade link disappears and the new name
         // shows up in the corner.
         await game.showMainMenu();
       } catch (err) {
+        stopDots();
         if (err instanceof ApiError) {
           if (err.code === "username_taken") {
             errorText.textContent = "Username is already taken.";
@@ -1115,6 +1153,7 @@ export class MainMenuScene extends Container implements IScene {
     if (this.logoutText) {
       this.logoutText.position.set(width - 20, y);
     }
+    this.positionFooter();
   }
 
   destroy(): void {

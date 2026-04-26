@@ -118,11 +118,13 @@ export class AuthScene extends Container implements IScene {
     guestBtn.addEventListener("click", async () => {
       errText.textContent = "";
       guestBtn.disabled = true;
-      guestBtn.textContent = "Loading...";
+      const stopDots = this.overlay!.animateButtonDots(guestBtn, "Loading");
       try {
         await authState.createGuest();
+        stopDots();
         game.showMainMenu();
       } catch {
+        stopDots();
         errText.textContent = "Could not create guest account. Try again.";
         guestBtn.disabled = false;
         guestBtn.textContent = "Continue as Guest";
@@ -259,7 +261,7 @@ export class AuthScene extends Container implements IScene {
         return;
       }
       overlay.setButtonEnabled(submitBtn, false);
-      submitBtn.textContent = "Loading...";
+      const stopDots = overlay.animateButtonDots(submitBtn, "Loading");
       errorText.textContent = "";
       try {
         if (isSignUp) {
@@ -268,18 +270,22 @@ export class AuthScene extends Container implements IScene {
             await authState.createGuest();
           }
           await authState.upgrade(username, password);
+          stopDots();
           game.showMainMenu();
         } else {
           const result = await authState.login(username, password);
           if (result.kind === "totp") {
+            stopDots();
             this.totpTicket = result.ticket;
             this.view = "totp";
             this.render();
             return;
           }
+          stopDots();
           game.showMainMenu();
         }
       } catch (err) {
+        stopDots();
         if (err instanceof ApiError) {
           if (err.code === "username_taken") {
             errorText.textContent = "Username is already taken.";
@@ -364,13 +370,15 @@ export class AuthScene extends Container implements IScene {
         return;
       }
       submitBtn.disabled = true;
-      submitBtn.textContent = "Verifying...";
+      const stopDots = this.overlay!.animateButtonDots(submitBtn, "Verifying");
       errorText.textContent = "";
       try {
         await authState.completeTotpLogin(this.totpTicket, code);
+        stopDots();
         this.totpTicket = null;
         game.showMainMenu();
       } catch (err) {
+        stopDots();
         if (err instanceof ApiError) {
           if (err.code === "invalid_totp") {
             errorText.textContent = "Invalid code. Try again.";
@@ -444,7 +452,7 @@ export class AuthScene extends Container implements IScene {
         return;
       }
       submitBtn.disabled = true;
-      submitBtn.textContent = "Sending...";
+      const stopDots = this.overlay!.animateButtonDots(submitBtn, "Sending");
       try {
         const isEmail = value.includes("@");
         await authApi.forgotPassword(isEmail ? { email: value } : { username: value });
@@ -455,6 +463,7 @@ export class AuthScene extends Container implements IScene {
         status.style.color = "#188038";
         status.textContent = "If an account matches, you'll receive an email shortly.";
       } finally {
+        stopDots();
         submitBtn.disabled = false;
         submitBtn.textContent = "Send Reset Link";
       }

@@ -333,6 +333,19 @@ export class HtmlOverlay {
     return button;
   }
 
+  // Cycles "base.", "base..", "base..." on the button label so multi-second
+  // auth round-trips don't look frozen. Returns a stop fn the caller invokes
+  // before restoring the final label.
+  animateButtonDots(button: HTMLButtonElement, baseText: string): () => void {
+    let i = 1;
+    button.textContent = `${baseText}.`;
+    const id = window.setInterval(() => {
+      i = (i % 3) + 1;
+      button.textContent = baseText + ".".repeat(i);
+    }, 350);
+    return () => window.clearInterval(id);
+  }
+
   // A small inline progress spinner. Used in waiting/loading cards so users
   // can tell the UI is alive even when nothing else changes.
   createSpinner(parent: HTMLElement, size: number = 20): HTMLDivElement {
