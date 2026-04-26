@@ -7,10 +7,12 @@ import { authState } from "../managers/AuthStateManager";
 import { HtmlOverlay } from "../ui/HtmlOverlay";
 import { ApiError, authApi, dailyApi, type DailyTodayRes } from "../network/rest";
 import { evaluatePassword, PASSWORD_HINT } from "../managers/passwordStrength";
+import { createBetaBadge } from "../ui/pixiBetaBadge";
 
 export class MainMenuScene extends Container implements IScene {
   private app: Application;
   private title: Text | null = null;
+  private betaBadge: Container | null = null;
   private dailyButton: Container | null = null;
   private dailyInfo: Container | null = null;
   private dailyTooltip: Container | null = null;
@@ -74,8 +76,20 @@ export class MainMenuScene extends Container implements IScene {
       },
     });
     this.title.anchor.set(0.5);
-    this.title.position.set(this.app.screen.width / 2, this.app.screen.height / 4);
     this.addChild(this.title);
+
+    this.betaBadge = createBetaBadge();
+    this.addChild(this.betaBadge);
+
+    this.positionTitle();
+  }
+
+  private positionTitle(): void {
+    if (!this.title) return;
+    this.title.position.set(this.app.screen.width / 2, this.app.screen.height / 4);
+    if (this.betaBadge) {
+      this.betaBadge.position.set(this.title.x + this.title.width / 2 + 8, this.title.y);
+    }
   }
 
   private drawFilledButton(bg: Graphics, w: number, h: number, fill: number): void {
@@ -1040,10 +1054,8 @@ export class MainMenuScene extends Container implements IScene {
     // No updates needed for menu
   }
 
-  resize(width: number, height: number): void {
-    if (this.title) {
-      this.title.position.set(width / 2, height / 4);
-    }
+  resize(width: number, _height: number): void {
+    this.positionTitle();
     if (this.dailyButton) {
       this.dailyButton.position.set(width / 2, this.dailyButtonY());
     }

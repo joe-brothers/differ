@@ -2,6 +2,7 @@ import { Application, Container, Text } from "pixi.js";
 import type { IScene } from "../types";
 import { COLORS } from "../constants";
 import { HtmlOverlay } from "../ui/HtmlOverlay";
+import { createBetaBadge } from "../ui/pixiBetaBadge";
 import { authState } from "../managers/AuthStateManager";
 import { ApiError, authApi } from "../network/rest";
 import { game } from "../core/Game";
@@ -13,6 +14,7 @@ export class AuthScene extends Container implements IScene {
   private app: Application;
   private overlay: HtmlOverlay | null = null;
   private title: Text | null = null;
+  private betaBadge: Container | null = null;
   private view: AuthView = "chooser";
   private totpTicket: string | null = null;
 
@@ -37,8 +39,20 @@ export class AuthScene extends Container implements IScene {
       },
     });
     this.title.anchor.set(0.5);
-    this.title.position.set(this.app.screen.width / 2, this.app.screen.height * 0.15);
     this.addChild(this.title);
+
+    this.betaBadge = createBetaBadge();
+    this.addChild(this.betaBadge);
+
+    this.positionTitle();
+  }
+
+  private positionTitle(): void {
+    if (!this.title) return;
+    this.title.position.set(this.app.screen.width / 2, this.app.screen.height * 0.15);
+    if (this.betaBadge) {
+      this.betaBadge.position.set(this.title.x + this.title.width / 2 + 8, this.title.y);
+    }
   }
 
   private resetOverlay(): HTMLDivElement | null {
@@ -438,8 +452,8 @@ export class AuthScene extends Container implements IScene {
     /* no-op */
   }
 
-  resize(width: number, height: number): void {
-    if (this.title) this.title.position.set(width / 2, height * 0.15);
+  resize(_width: number, _height: number): void {
+    this.positionTitle();
   }
 
   destroy(): void {
