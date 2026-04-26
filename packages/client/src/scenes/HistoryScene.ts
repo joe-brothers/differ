@@ -56,7 +56,7 @@ export class HistoryScene extends Container implements IScene {
     try {
       const res = await authApi.recent(PAGE_LIMIT);
       if (this.statusText) this.statusText.visible = false;
-      this.renderEntries(res.games);
+      this.renderEntries(res.games.filter(isDisplayable));
     } catch {
       if (this.statusText) this.statusText.text = "Failed to load history";
     }
@@ -299,6 +299,12 @@ export class HistoryScene extends Container implements IScene {
   }
 }
 
+// Solo timeouts are hidden from the recent list — they aren't an interesting
+// outcome to surface. 1v1 timeouts remain (rendered as DRAW or WIN/LOSS).
+function isDisplayable(entry: RecentGameEntry): boolean {
+  return !(entry.outcome === "timeout" && entry.mode === "single");
+}
+
 function outcomePalette(entry: RecentGameEntry): { label: string; bg: number; fg: number } {
   if (entry.outcome === "win") {
     return { label: "WIN", bg: COLORS.successBg, fg: COLORS.success };
@@ -306,11 +312,9 @@ function outcomePalette(entry: RecentGameEntry): { label: string; bg: number; fg
   if (entry.outcome === "loss") {
     return { label: "LOSS", bg: COLORS.errorBg, fg: COLORS.error };
   }
-  // timeout: distinguish solo timeout (just out of time) from a versus draw.
-  if (entry.mode === "1v1" && entry.endReason === "timeout" && entry.opponent == null) {
-    return { label: "DRAW", bg: COLORS.surfaceMuted, fg: COLORS.textSecondary };
-  }
-  return { label: "TIME", bg: COLORS.warningBg, fg: COLORS.warning };
+  // 1v1 timeout with no opponent shown → draw. Solo timeouts are filtered
+  // upstream by isDisplayable, so they never reach the palette.
+  return { label: "DRAW", bg: COLORS.surfaceMuted, fg: COLORS.textSecondary };
 }
 
 function formatMs(ms: number): string {
