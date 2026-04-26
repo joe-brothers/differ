@@ -69,6 +69,7 @@ export class GameScene extends Container implements IScene {
   private offPlayerOffline?: () => void;
   private offPlayerOnline?: () => void;
   private offPlayerReady?: () => void;
+  private offKeyDown?: () => void;
 
   constructor(app: Application) {
     super();
@@ -95,6 +96,7 @@ export class GameScene extends Container implements IScene {
     this.setupOverlays();
     this.setupStateListeners();
     this.setupSocketListeners();
+    this.setupKeyboardShortcuts();
 
     // React overlay reads from the store; publish HUD + wire modal callbacks.
     const ui = useUIStore.getState();
@@ -351,6 +353,36 @@ export class GameScene extends Container implements IScene {
     this.offPlayerReady = () => socket.off("player_ready", onPlayerReady);
   }
 
+  private setupKeyboardShortcuts(): void {
+    // Use e.code (physical key) so the shortcut survives IME composition —
+    // e.key would surface the composed Korean jamo when 한/영 is set to Korean.
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "KeyA" && e.code !== "KeyD") return;
+      if (e.repeat) return;
+
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (gameState.getState().mode !== "playing") return;
+      if (useUIStore.getState().modal.type !== "none") return;
+
+      e.preventDefault();
+      if (e.code === "KeyA") {
+        gameState.prevImage();
+      } else {
+        gameState.nextImage();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    this.offKeyDown = () => window.removeEventListener("keydown", onKeyDown);
+  }
+
   private setOpponentOnline(online: boolean): void {
     useUIStore.getState().setOpponentOnline(online);
   }
@@ -553,6 +585,7 @@ export class GameScene extends Container implements IScene {
     this.offPlayerOffline?.();
     this.offPlayerOnline?.();
     this.offPlayerReady?.();
+    this.offKeyDown?.();
     for (const off of this.offStateListeners) off();
     this.offStateListeners = [];
 

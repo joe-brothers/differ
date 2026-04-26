@@ -31,15 +31,29 @@ export class NavButtons extends Container {
       text: label,
       style: {
         fontFamily: "Arial, sans-serif",
-        fontSize: 28,
+        fontSize: 22,
         fontWeight: "500",
         fill: COLORS.primaryOn,
       },
     });
     text.anchor.set(0.5);
-    text.position.set(size / 2, size / 2);
+    text.position.set(size / 2, 16);
 
-    button.addChild(bg, text);
+    const keyHint = new Text({
+      text: isPrev ? "A" : "D",
+      style: {
+        fontFamily: "Arial, sans-serif",
+        fontSize: 11,
+        fontWeight: "700",
+        fill: COLORS.primaryOn,
+        letterSpacing: 0.5,
+      },
+    });
+    keyHint.anchor.set(0.5);
+    keyHint.position.set(size / 2, 36);
+    keyHint.alpha = 0.85;
+
+    button.addChild(bg, text, keyHint);
 
     button.eventMode = "static";
     button.cursor = "pointer";
