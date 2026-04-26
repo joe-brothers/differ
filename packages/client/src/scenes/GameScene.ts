@@ -298,8 +298,15 @@ export class GameScene extends Container implements IScene {
             ? winnerElapsedSec / 1000
             : 0;
         const myFound = mine?.foundCount ?? state.foundCount;
+        const oppFound = opp?.foundCount ?? state.opponentFoundCount ?? 0;
         const opponentName = opp?.name ?? state.opponentUsername ?? "Opponent";
-        ui.showComplete1v1(isWin ? "win" : "lose", elapsedForModal, myFound, opponentName);
+        ui.showComplete1v1(
+          isWin ? "win" : "lose",
+          elapsedForModal,
+          myFound,
+          oppFound,
+          opponentName,
+        );
       } else {
         ui.showCompleteSingle(myElapsedSec);
       }

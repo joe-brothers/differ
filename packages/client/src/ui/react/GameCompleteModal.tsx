@@ -54,6 +54,7 @@ export function GameCompleteModal() {
   // outcome doesn't feel like a stopwatch they didn't trigger.
   const is1v1 = modal.type === "complete-1v1";
   const isLoser = is1v1 && modal.result === "lose";
+  const isWinner = is1v1 && modal.result === "win";
 
   return (
     <div style={modalBackdropStyle(0.5)}>
@@ -112,6 +113,20 @@ export function GameCompleteModal() {
               {formatTime(modal.elapsedSec)}
             </div>
           </>
+        )}
+
+        {isWinner && modal.type === "complete-1v1" && (
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 13,
+              color: CSS.textSecondary,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {modal.opponentName || "Opponent"} found {modal.opponentFoundCount}/
+            {TOTAL_DIFFS_PER_GAME}
+          </div>
         )}
 
         {rank !== undefined && (

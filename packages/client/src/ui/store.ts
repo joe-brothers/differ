@@ -16,6 +16,7 @@ export type OverlayModal =
       // to show it). Loser sees a foundCount progress line instead.
       elapsedSec: number;
       foundCount: number;
+      opponentFoundCount: number;
       opponentName: string;
     };
 
@@ -68,6 +69,7 @@ interface UIStore {
     result: "win" | "lose",
     elapsedSec: number,
     foundCount: number,
+    opponentFoundCount: number,
     opponentName: string,
   ) => void;
   markRematchPending: () => void;
@@ -132,9 +134,16 @@ export const useUIStore = create<UIStore>((set) => ({
       rematchPending: false,
       opponentRematch: false,
     }),
-  showComplete1v1: (result, elapsedSec, foundCount, opponentName) =>
+  showComplete1v1: (result, elapsedSec, foundCount, opponentFoundCount, opponentName) =>
     set({
-      modal: { type: "complete-1v1", result, elapsedSec, foundCount, opponentName },
+      modal: {
+        type: "complete-1v1",
+        result,
+        elapsedSec,
+        foundCount,
+        opponentFoundCount,
+        opponentName,
+      },
       rematchPending: false,
       opponentRematch: false,
     }),
