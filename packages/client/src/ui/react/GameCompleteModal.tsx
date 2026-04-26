@@ -1,3 +1,4 @@
+import type { CSSProperties, ReactNode } from "react";
 import { useUIStore, type OverlayModal } from "../store";
 import { cardStyle, CSS, FONT_MONO, modalBackdropStyle } from "../styles";
 import { Button } from "./Button";
@@ -9,10 +10,23 @@ function formatTime(elapsedSec: number): string {
   return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 }
 
+const opponentNameStyle: CSSProperties = {
+  fontFamily: FONT_MONO,
+  fontWeight: 600,
+  color: CSS.text,
+  padding: "1px 6px",
+  borderRadius: 4,
+  backgroundColor: CSS.primarySoft,
+};
+
+function OpponentName({ name }: { name: string }) {
+  return <span style={opponentNameStyle}>{name}</span>;
+}
+
 interface Copy {
   title: string;
   titleColor: string;
-  subtitle: string;
+  subtitle: ReactNode;
   playAgainLabel: string;
 }
 
@@ -28,11 +42,15 @@ function getCopy(
     };
   }
   const isWin = modal.result === "win";
-  const opponent = modal.opponentName || "your opponent";
+  const opponent = modal.opponentName ? (
+    <OpponentName name={modal.opponentName} />
+  ) : (
+    "your opponent"
+  );
   return {
     title: isWin ? "You Win" : "You Lost",
     titleColor: isWin ? CSS.success : CSS.error,
-    subtitle: isWin ? `You beat ${opponent}.` : `${opponent} beat you.`,
+    subtitle: isWin ? <>You beat {opponent}.</> : <>{opponent} beat you.</>,
     playAgainLabel: "Rematch",
   };
 }
@@ -124,8 +142,8 @@ export function GameCompleteModal() {
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {modal.opponentName || "Opponent"} found {modal.opponentFoundCount}/
-            {TOTAL_DIFFS_PER_GAME}
+            {modal.opponentName ? <OpponentName name={modal.opponentName} /> : "Opponent"} found{" "}
+            {modal.opponentFoundCount}/{TOTAL_DIFFS_PER_GAME}
           </div>
         )}
 
@@ -158,7 +176,8 @@ export function GameCompleteModal() {
               textAlign: "center",
             }}
           >
-            {modal.opponentName || "Opponent"} wants a rematch
+            {modal.opponentName ? <OpponentName name={modal.opponentName} /> : "Opponent"} wants a
+            rematch
           </div>
         )}
 

@@ -106,7 +106,12 @@ export function GameHud() {
           />
           <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
             <span>
-              {opponentName || "Opponent"} {opponentFoundCount}/{TOTAL_DIFFS_PER_GAME}
+              {opponentName ? (
+                <span style={{ fontFamily: FONT_MONO, fontWeight: 600 }}>{opponentName}</span>
+              ) : (
+                "Opponent"
+              )}{" "}
+              {opponentFoundCount}/{TOTAL_DIFFS_PER_GAME}
             </span>
             {opponentName && (
               <span style={{ color: CSS.textSecondary, fontSize: 11, fontWeight: 400 }}>
