@@ -28,7 +28,7 @@ export class AuthScene extends Container implements IScene {
 
   private createTitle(): void {
     this.title = new Text({
-      text: "Find the Difference",
+      text: "Differ: Spot the Difference",
       style: {
         fontFamily: "Arial, sans-serif",
         fontSize: 36,
