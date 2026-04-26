@@ -6,8 +6,10 @@ import type { Env } from "./env.js";
 import { authRoutes } from "./auth/routes.js";
 import { roomRoutes } from "./rooms/routes.js";
 import { leaderboardRoutes } from "./leaderboard/routes.js";
+import { matchmakingRoutes } from "./matchmaking/routes.js";
 
 export { GameRoom } from "./rooms/game-room.js";
+export { MatchmakingQueue } from "./matchmaking/queue.js";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -55,6 +57,7 @@ app.get("/health", (c) => c.json({ ok: true }));
 app.route("/auth", authRoutes);
 app.route("/rooms", roomRoutes);
 app.route("/leaderboard", leaderboardRoutes);
+app.route("/matchmaking", matchmakingRoutes);
 
 app.notFound((c) => c.json({ error: { code: "not_found", message: "Not found" } }, 404));
 app.onError((err, c) => {

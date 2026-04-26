@@ -120,6 +120,12 @@ export const authApi = {
   },
 };
 
+function wsBase(): string {
+  if (API_BASE_URL) return API_BASE_URL.replace(/^http/, "ws");
+  const proto = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${window.location.host}`;
+}
+
 export const roomApi = {
   create(req: CreateRoomReq): Promise<CreateRoomRes> {
     return request<CreateRoomRes>("/rooms", { method: "POST", body: req });
@@ -127,9 +133,13 @@ export const roomApi = {
   wsUrl(code: string): string {
     // API_BASE_URL is "" by default (same-origin via vite proxy or prod
     // co-deploy). Synthesize an absolute ws(s):// URL from window.location.
-    if (API_BASE_URL) return `${API_BASE_URL.replace(/^http/, "ws")}/rooms/${code}/ws`;
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    return `${proto}://${window.location.host}/rooms/${code}/ws`;
+    return `${wsBase()}/rooms/${code}/ws`;
+  },
+};
+
+export const matchmakingApi = {
+  wsUrl(): string {
+    return `${wsBase()}/matchmaking/ws`;
   },
 };
 

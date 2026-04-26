@@ -1,5 +1,5 @@
 import { Application, Assets } from "pixi.js";
-import type { Puzzle, ServerWelcome } from "@differ/shared";
+import type { Puzzle, ServerGameEnd, ServerWelcome } from "@differ/shared";
 import { SceneManager } from "./SceneManager";
 import { gameState } from "../managers/GameStateManager";
 import { authState } from "../managers/AuthStateManager";
@@ -12,8 +12,9 @@ import { HistoryScene } from "../scenes/HistoryScene";
 import { MatchmakingScene } from "../scenes/MatchmakingScene";
 import type { ImageData, SelectedDifference, DiffRect, GameType } from "../types";
 import { CDN_BASE } from "../constants";
-import { roomApi } from "../network/rest";
+import { matchmakingApi, roomApi } from "../network/rest";
 import { RoomSocket } from "../network/ws";
+import { QueueSocket } from "../network/queueWs";
 
 // Persisted on game_start (or welcome-in-progress) so a tab close/reopen
 // during an active game can rejoin automatically instead of dumping the
@@ -56,6 +57,11 @@ export class Game {
 
   // Hand-off for MatchmakingScene: a room code to resume waiting on.
   private pendingWaitingRoomCode: string | null = null;
+
+  // The opponent userId from the most recent 1v1 game in this tab. Sent to
+  // the matchmaking queue so we don't get rematched with the same person
+  // back-to-back (relaxed after 5s of waiting). Memory-only, resets on reload.
+  private lastOpponentId: string | null = null;
 
   constructor(app: Application) {
     this.app = app;
@@ -162,6 +168,44 @@ export class Game {
     await this.connectAndPlay(roomCode, "one_on_one");
   }
 
+  // Random matchmaking. Opens the queue WS and resolves once the server
+  // returns `queue_matched`; the caller is then connected to the new room
+  // (game_start follows automatically). The returned `cancel` callback can
+  // be used to abort while waiting.
+  startQuickMatch(): {
+    matched: Promise<string>;
+    cancel: () => void;
+  } {
+    if (!authState.isAuthenticated()) throw new Error("Not authenticated");
+    const queue = new QueueSocket(matchmakingApi.wsUrl());
+    let cancelled = false;
+    const matched = (async (): Promise<string> => {
+      await queue.connect();
+      if (cancelled) {
+        queue.close();
+        throw new Error("cancelled");
+      }
+      queue.send({ kind: "queue_join", lastOpponentId: this.lastOpponentId });
+      const code: string = await new Promise((resolve, reject) => {
+        queue.on("queue_matched", (msg: { roomCode: string }) => resolve(msg.roomCode));
+        queue.on("queue_error", (msg: { message: string }) => reject(new Error(msg.message)));
+        queue.on("close", () => {
+          if (!cancelled) reject(new Error("queue closed"));
+        });
+      });
+      queue.close();
+      await this.connectAndPlay(code, "one_on_one");
+      return code;
+    })();
+    return {
+      matched,
+      cancel: () => {
+        cancelled = true;
+        queue.close();
+      },
+    };
+  }
+
   // Used for rematch votes in 1v1 (first game auto-starts on capacity fill).
   sendReady(): void {
     this.socket?.send({ kind: "ready" });
@@ -191,8 +235,15 @@ export class Game {
 
     // Game ended — the room reverts to a waiting/rematch lobby, so there
     // is no longer an in-progress session to auto-rejoin on next load.
-    socket.on("game_end", () => {
+    socket.on("game_end", (msg: ServerGameEnd) => {
       clearActiveRoom();
+      // Stash the opponent's userId so the next Quick Match can avoid an
+      // immediate rematch with the same person (5s relaxation server-side).
+      if (gameType === "one_on_one") {
+        const myId = authState.getUser()?.userId;
+        const other = msg.results.find((r) => r.userId !== myId);
+        if (other) this.lastOpponentId = other.userId;
+      }
     });
 
     // Welcome-based rejoin: if the server says a game is already in

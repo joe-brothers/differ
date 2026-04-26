@@ -29,9 +29,17 @@ migrations_dir = "src/db/migrations"
 name = "GAME_ROOM"
 class_name = "GameRoom"
 
+[[durable_objects.bindings]]
+name = "MATCHMAKING_QUEUE"
+class_name = "MatchmakingQueue"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GameRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["MatchmakingQueue"]
 
 # namespace_id 1xxx = local, 2xxx = prod. Counters are shared per namespace_id
 # across deployments, so dev tests must not reuse prod IDs.
@@ -89,9 +97,17 @@ migrations_dir = "src/db/migrations"
 name = "GAME_ROOM"
 class_name = "GameRoom"
 
+[[env.production.durable_objects.bindings]]
+name = "MATCHMAKING_QUEUE"
+class_name = "MatchmakingQueue"
+
 [[env.production.migrations]]
 tag = "v1"
 new_sqlite_classes = ["GameRoom"]
+
+[[env.production.migrations]]
+tag = "v2"
+new_sqlite_classes = ["MatchmakingQueue"]
 
 [[env.production.unsafe.bindings]]
 name = "RL_LOGIN"

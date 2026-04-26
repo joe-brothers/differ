@@ -15,6 +15,10 @@ export class MatchmakingScene extends Container implements IScene {
   private cancelled = false;
   private opponentEl: HTMLDivElement | null = null;
   private waitingSpinner: HTMLDivElement | null = null;
+  // Active Quick Match handle, so the Cancel button can abort the queue WS.
+  private quickCancel: (() => void) | null = null;
+  // Elapsed-time ticker on the searching screen.
+  private quickElapsedTimer: number | null = null;
 
   constructor(app: Application) {
     super();
@@ -75,13 +79,124 @@ export class MatchmakingScene extends Container implements IScene {
     });
     card.appendChild(heading);
 
-    const createBtn = this.overlay.createButton(card, "Create Room");
-    const joinBtn = this.overlay.createButton(card, "Join with Code");
+    const quickBtn = this.overlay.createButton(card, "Quick Match");
+    const createBtn = this.overlay.createSecondaryButton(card, "Create Room");
+    const joinBtn = this.overlay.createSecondaryButton(card, "Join with Code");
     const backBtn = this.overlay.createSecondaryButton(card, "Back");
 
+    quickBtn.addEventListener("click", () => this.startQuickMatch());
     createBtn.addEventListener("click", () => this.createRoom());
     joinBtn.addEventListener("click", () => this.showJoinForm());
     backBtn.addEventListener("click", () => game.showMainMenu());
+  }
+
+  private startQuickMatch(): void {
+    this.renderSearchingView();
+    const handle = game.startQuickMatch();
+    this.quickCancel = handle.cancel;
+    void (async () => {
+      try {
+        await handle.matched;
+        // game.startQuickMatch already connected us to the room and wired
+        // up game_start handling on the room socket. From here, the regular
+        // welcome / opponent flow takes over (renderOpponent, etc.) — we
+        // hand off to showWaitingJoined so the user sees a familiar lobby
+        // card while the server fires game_start.
+        if (this.cancelled) return;
+        this.quickCancel = null;
+        this.stopQuickElapsedTimer();
+        this.showWaitingJoined();
+      } catch (err) {
+        const message = (err as Error).message;
+        if (this.cancelled || message === "cancelled") return;
+        this.quickCancel = null;
+        this.stopQuickElapsedTimer();
+        this.showQuickMatchError(message);
+      }
+    })();
+  }
+
+  private renderSearchingView(): void {
+    this.resetOverlay();
+    if (!this.overlay) return;
+    const card = this.overlay.createFormContainer();
+
+    const heading = document.createElement("h2");
+    heading.textContent = "Finding a match";
+    Object.assign(heading.style, {
+      color: "#202124",
+      margin: "0 0 8px 0",
+      fontSize: "20px",
+      fontWeight: "500",
+      textAlign: "center",
+    });
+    card.appendChild(heading);
+
+    const elapsedEl = document.createElement("p");
+    elapsedEl.textContent = "Searching for an opponent... 0s";
+    Object.assign(elapsedEl.style, {
+      color: "#5F6368",
+      fontSize: "14px",
+      textAlign: "center",
+      margin: "0 0 12px 0",
+    });
+    card.appendChild(elapsedEl);
+
+    this.waitingSpinner = this.overlay.createSpinner(card, 24);
+
+    const cancelBtn = this.overlay.createSecondaryButton(card, "Cancel");
+    cancelBtn.addEventListener("click", () => {
+      this.quickCancel?.();
+      this.quickCancel = null;
+      this.stopQuickElapsedTimer();
+      this.showChooser();
+    });
+
+    const startedAt = Date.now();
+    this.stopQuickElapsedTimer();
+    this.quickElapsedTimer = window.setInterval(() => {
+      const secs = Math.floor((Date.now() - startedAt) / 1000);
+      elapsedEl.textContent = `Searching for an opponent... ${secs}s`;
+    }, 1000);
+  }
+
+  private stopQuickElapsedTimer(): void {
+    if (this.quickElapsedTimer != null) {
+      window.clearInterval(this.quickElapsedTimer);
+      this.quickElapsedTimer = null;
+    }
+  }
+
+  private showQuickMatchError(message: string): void {
+    this.resetOverlay();
+    if (!this.overlay) return;
+    const card = this.overlay.createFormContainer();
+
+    const heading = document.createElement("h2");
+    heading.textContent = "Match search failed";
+    Object.assign(heading.style, {
+      color: "#202124",
+      margin: "0 0 8px 0",
+      fontSize: "20px",
+      fontWeight: "500",
+      textAlign: "center",
+    });
+    card.appendChild(heading);
+
+    const msg = document.createElement("p");
+    msg.textContent = message;
+    Object.assign(msg.style, {
+      color: "#D93025",
+      fontSize: "13px",
+      textAlign: "center",
+      margin: "0 0 12px 0",
+    });
+    card.appendChild(msg);
+
+    const retryBtn = this.overlay.createButton(card, "Try Again");
+    const backBtn = this.overlay.createSecondaryButton(card, "Back");
+    retryBtn.addEventListener("click", () => this.startQuickMatch());
+    backBtn.addEventListener("click", () => this.showChooser());
   }
 
   private async createRoom(): Promise<void> {
@@ -432,6 +547,11 @@ export class MatchmakingScene extends Container implements IScene {
   destroy(): void {
     this.overlay?.destroy();
     this.overlay = null;
+    this.stopQuickElapsedTimer();
+    // If the user navigated away mid-search (Cancel goes through showChooser,
+    // but a hard scene swap doesn't), drop the queue WS to free the seat.
+    this.quickCancel?.();
+    this.quickCancel = null;
     this.removeAllListeners();
     super.destroy({ children: true });
   }

@@ -160,3 +160,49 @@ export const ServerMsg = z.discriminatedUnion("kind", [
   ServerError,
 ]);
 export type ServerMsg = z.infer<typeof ServerMsg>;
+
+// ─── Matchmaking queue (random 1v1) ─────────────────────────────────────────
+// Separate channel from GameRoom WS. Client connects, sends `queue_join`,
+// waits for `queue_matched` with a room code, then closes the queue WS and
+// connects to the regular GameRoom WS at that code.
+
+export const QueueClientJoin = z.object({
+  kind: z.literal("queue_join"),
+  // The userId of the client's most recent 1v1 opponent. Used to avoid
+  // pairing the same two players back-to-back, with a 5s relaxation window.
+  lastOpponentId: z.string().nullable(),
+});
+export type QueueClientJoin = z.infer<typeof QueueClientJoin>;
+
+export const QueueClientCancel = z.object({
+  kind: z.literal("queue_cancel"),
+});
+export type QueueClientCancel = z.infer<typeof QueueClientCancel>;
+
+export const QueueClientMsg = z.discriminatedUnion("kind", [QueueClientJoin, QueueClientCancel]);
+export type QueueClientMsg = z.infer<typeof QueueClientMsg>;
+
+export const QueueServerQueued = z.object({
+  kind: z.literal("queue_queued"),
+});
+export type QueueServerQueued = z.infer<typeof QueueServerQueued>;
+
+export const QueueServerMatched = z.object({
+  kind: z.literal("queue_matched"),
+  roomCode: z.string(),
+});
+export type QueueServerMatched = z.infer<typeof QueueServerMatched>;
+
+export const QueueServerError = z.object({
+  kind: z.literal("queue_error"),
+  code: z.string(),
+  message: z.string(),
+});
+export type QueueServerError = z.infer<typeof QueueServerError>;
+
+export const QueueServerMsg = z.discriminatedUnion("kind", [
+  QueueServerQueued,
+  QueueServerMatched,
+  QueueServerError,
+]);
+export type QueueServerMsg = z.infer<typeof QueueServerMsg>;

@@ -40,6 +40,8 @@ export class CountdownOverlay extends Container {
     const delay = 800;
 
     for (const item of sequence) {
+      // Sequential by design: each step is the next number in the countdown.
+      // eslint-disable-next-line no-await-in-loop
       await this.showItem(item, delay);
     }
 

@@ -21,6 +21,7 @@ export default defineConfig({
       "/auth": proxyConfig,
       "/rooms": proxyConfig,
       "/leaderboard": proxyConfig,
+      "/matchmaking": proxyConfig,
       "/health": proxyConfig,
     },
   },

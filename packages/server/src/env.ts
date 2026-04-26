@@ -5,6 +5,7 @@ export interface RateLimit {
 export interface Env {
   DB: D1Database;
   GAME_ROOM: DurableObjectNamespace;
+  MATCHMAKING_QUEUE: DurableObjectNamespace;
 
   RL_LOGIN: RateLimit;
   RL_GUEST: RateLimit;

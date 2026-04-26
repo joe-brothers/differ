@@ -5,16 +5,9 @@ import { requireAuth, type AuthEnv } from "../auth/middleware.js";
 import { checkRateLimit, roomCreateKey } from "../auth/rate-limit.js";
 import { readTokenCookie } from "../auth/cookie.js";
 import { verifyToken } from "../auth/jwt.js";
+import { createGameRoom } from "./create.js";
 
 export const roomRoutes = new Hono<AuthEnv>();
-
-const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1
-function genRoomCode(): string {
-  let out = "";
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  for (let i = 0; i < 6; i++) out += CODE_ALPHABET[bytes[i]! % CODE_ALPHABET.length];
-  return out;
-}
 
 // WebSocket upgrade. Auth is now done here at the worker level (cookie),
 // then we forward the verified token to the DO via a private header so the
@@ -53,19 +46,12 @@ roomRoutes.post("/", requireAuth, async (c) => {
     return c.json({ error: { code: "bad_request", message: "Invalid body" } }, 400);
   }
   const { mode } = parsed.data;
-  const roomCode = genRoomCode();
 
-  const id = (c.env as Env).GAME_ROOM.idFromName(roomCode);
-  const stub = (c.env as Env).GAME_ROOM.get(id);
-
-  const initRes = await stub.fetch("https://do/__init__", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ roomCode, mode, createdBy: c.get("user").sub }),
-  });
-  if (!initRes.ok) {
-    const body = await initRes.text();
-    return c.json({ error: { code: "init_failed", message: body } }, 500);
+  let roomCode: string;
+  try {
+    ({ roomCode } = await createGameRoom(c.env as Env, mode, userId));
+  } catch (err) {
+    return c.json({ error: { code: "init_failed", message: (err as Error).message } }, 500);
   }
 
   const host = new URL(c.req.url).host;
