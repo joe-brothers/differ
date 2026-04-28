@@ -1,6 +1,6 @@
 name = "differ-server-local"
 main = "src/index.ts"
-compatibility_date = "2024-11-01"
+compatibility_date = "2026-04-21"
 compatibility_flags = ["nodejs_compat"]
 
 # Top-level config = local dev (`wrangler dev`). Production uses the
