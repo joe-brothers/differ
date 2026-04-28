@@ -1,5 +1,5 @@
 import { Application, Container, Assets, Graphics, Sprite } from "pixi.js";
-import type { IScene } from "../types";
+import type { IScene, DiffRect } from "../types";
 import {
   IMAGE_WIDTH,
   IMAGE_HEIGHT,
@@ -21,6 +21,7 @@ import { NavButtons } from "../components/NavButtons";
 import { MenuIcon } from "../components/MenuIcon";
 import { CelebrationEffect } from "../components/CelebrationEffect";
 import { CountdownOverlay } from "../components/CountdownOverlay";
+import { HintOverlay } from "../components/HintOverlay";
 import { useUIStore } from "../ui/store";
 
 export class GameScene extends Container implements IScene {
@@ -73,6 +74,11 @@ export class GameScene extends Container implements IScene {
   private offPlayerReady?: () => void;
   private offHintRevealed?: () => void;
   private offKeyDown?: () => void;
+
+  // Hint mode state. The overlays mirror `gameState.pendingHint`; we keep
+  // direct references so they can be removed without rebuilding the panels.
+  private hintOverlayLeft: HintOverlay | null = null;
+  private hintOverlayRight: HintOverlay | null = null;
 
   constructor(app: Application) {
     super();
@@ -235,12 +241,24 @@ export class GameScene extends Container implements IScene {
     });
 
     on<number>("imageChanged", (index) => {
+      // Panels are about to be rebuilt; drop hint overlay refs (otherwise
+      // their RAF callbacks keep ticking against orphaned Graphics).
+      this.hideHintOverlays();
       this.loadCurrentImage();
       this.navButtons.updateState(index, IMAGES_PER_GAME);
     });
 
     on<void>("inputDisabled", () => this.setInputEnabled(false));
     on<void>("inputEnabled", () => this.setInputEnabled(true));
+
+    on<{ rect: DiffRect }>("hintEntered", ({ rect }) => {
+      this.showHintOverlays(rect);
+      this.navButtons.setForceDisabled(true);
+    });
+    on<void>("hintExited", () => {
+      this.hideHintOverlays();
+      this.navButtons.setForceDisabled(false);
+    });
 
     // Timer is now server-driven (see update()); modeChanged just governs
     // input via other listeners. Likewise, gameCompleted/gameLost are
@@ -367,12 +385,26 @@ export class GameScene extends Container implements IScene {
       cooldownMs: number;
     }) => {
       // Hint is scoped to the puzzle the player was viewing when they asked,
-      // so no navigation is needed. `viaHint=true` tells the renderers to use
-      // the muted marker color so spotted diffs stay visually distinct.
+      // so no navigation is needed. We hold off on marking the diff found
+      // locally — entering "hint pending" mode instead — until the player
+      // clicks the highlighted rect. The server already counted it, so a
+      // refresh would surface it as a regular gray marker (acceptable per
+      // product call: pending state is not restored across reloads).
       if (msg.userId !== myId) return;
-      gameState.markDifferenceFoundById(msg.puzzleIdx, msg.diffId, true);
       gameState.recordHintUsed(msg.hintsUsed);
       useUIStore.getState().recordHintUsed(msg.cooldownMs, msg.hintsUsed);
+      // Snap to the hinted puzzle if the player swapped pages between the
+      // request and this response. Otherwise the spotlight would land on
+      // the wrong image.
+      if (gameState.getState().currentImageIndex !== msg.puzzleIdx) {
+        gameState.navigateToImage(msg.puzzleIdx);
+      }
+      const ok = gameState.enterHintMode(msg.puzzleIdx, msg.diffId);
+      if (!ok) {
+        // Fallback: rect lookup failed (e.g., diff already found by stale
+        // state). Mark it found the old way so we don't get stuck.
+        gameState.markDifferenceFoundById(msg.puzzleIdx, msg.diffId, true);
+      }
     };
 
     socket.on("click_result", onClick);
@@ -408,6 +440,9 @@ export class GameScene extends Container implements IScene {
 
       if (gameState.getState().mode !== "playing") return;
       if (useUIStore.getState().modal.type !== "none") return;
+      // Block a/d while a hint is pending — the player should resolve the
+      // highlighted rect on this puzzle before navigating away.
+      if (gameState.getState().pendingHint) return;
 
       e.preventDefault();
       if (e.code === "KeyA") {
@@ -483,6 +518,30 @@ export class GameScene extends Container implements IScene {
   private handleClickAt(x: number, y: number): void {
     const state = gameState.getState();
     if (state.inputDisabled || state.mode !== "playing") return;
+
+    // Hint pending: only the highlighted rect is interactive. Off-target
+    // clicks are silent no-ops (no wrong-click penalty — telling the user
+    // exactly where to click and then punishing them for missing the dim
+    // area would be hostile).
+    if (state.pendingHint) {
+      const r = state.pendingHint.rect;
+      const inside =
+        x >= r.start_point.x &&
+        x <= r.start_point.x + r.width &&
+        y >= r.start_point.y &&
+        y <= r.start_point.y + r.height;
+      if (!inside) return;
+      // Server already counted the diff on hint_revealed; resolve locally
+      // and exit hint mode. No `click` is sent.
+      gameState.markDifferenceFoundById(
+        state.pendingHint.puzzleIdx,
+        state.pendingHint.diffId,
+        true,
+      );
+      gameState.exitHintMode();
+      return;
+    }
+
     if (this.pendingClicks > 2) return; // crude backpressure
 
     const socket = game.getSocket();
@@ -547,6 +606,30 @@ export class GameScene extends Container implements IScene {
     const color = diff.viaHint ? MARKER_HINT_COLOR : MARKER_COLOR;
     const marker = new DiffMarker(centerX, centerY, undefined, true, color);
     this.rightMarkersContainer.addChild(marker);
+  }
+
+  private showHintOverlays(rect: DiffRect): void {
+    // Defensive: drop any stale overlays from a prior hint before mounting.
+    this.hideHintOverlays();
+    if (this.leftPanel) {
+      this.hintOverlayLeft = new HintOverlay(rect);
+      this.leftPanel.addChild(this.hintOverlayLeft);
+    }
+    if (this.rightPanelContainer) {
+      this.hintOverlayRight = new HintOverlay(rect);
+      this.rightPanelContainer.addChild(this.hintOverlayRight);
+    }
+  }
+
+  private hideHintOverlays(): void {
+    if (this.hintOverlayLeft) {
+      this.hintOverlayLeft.destroy();
+      this.hintOverlayLeft = null;
+    }
+    if (this.hintOverlayRight) {
+      this.hintOverlayRight.destroy();
+      this.hintOverlayRight = null;
+    }
   }
 
   private setInputEnabled(enabled: boolean): void {
@@ -629,6 +712,8 @@ export class GameScene extends Container implements IScene {
     this.offKeyDown?.();
     for (const off of this.offStateListeners) off();
     this.offStateListeners = [];
+
+    this.hideHintOverlays();
 
     useUIStore.getState().unmountHud();
 

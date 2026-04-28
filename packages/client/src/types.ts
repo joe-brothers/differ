@@ -59,6 +59,11 @@ export interface GameState {
   // Daily-only running total of hints used in the current attempt. Mirrored
   // into the UI store on every server `hint_revealed`.
   hintsUsed: number;
+  // Daily-only: when set, the player has just used a hint and the revealed
+  // rect is highlighted with a spotlight overlay. Clicks/keyboard nav are
+  // gated to the rect until the player clicks it (which marks it found
+  // locally; the server already counted it on hint_revealed).
+  pendingHint: { puzzleIdx: number; diffId: string; rect: DiffRect } | null;
 }
 
 // Scene interface

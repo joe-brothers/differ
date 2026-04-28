@@ -136,6 +136,7 @@ export function GameHud() {
 function HintButton() {
   const hintsUsed = useUIStore((s) => s.hintsUsed);
   const cooldownUntil = useUIStore((s) => s.hintCooldownUntilMs);
+  const hintActive = useUIStore((s) => s.hintActive);
   const currentImageIndex = useUIStore((s) => s.currentImageIndex);
   const [now, setNow] = useState(() => Date.now());
 
@@ -147,9 +148,10 @@ function HintButton() {
   const remainingMs = Math.max(0, cooldownUntil - now);
   const onCooldown = remainingMs > 0;
   const remainingSec = Math.ceil(remainingMs / 1000);
+  const disabled = onCooldown || hintActive;
 
   const onClick = () => {
-    if (onCooldown) return;
+    if (disabled) return;
     // Hint is scoped to the puzzle the player is currently looking at, so
     // pages they've already cleared don't keep getting picked at random.
     game.getSocket()?.send({ kind: "hint", puzzleIdx: currentImageIndex });
@@ -159,14 +161,14 @@ function HintButton() {
     <button
       type="button"
       onClick={onClick}
-      disabled={onCooldown}
+      disabled={disabled}
       style={{
         position: "absolute",
         top: UI_PADDING + 48,
         left: UI_PADDING,
         pointerEvents: "auto",
-        background: onCooldown ? CSS.surfaceMuted : CSS.surface,
-        color: onCooldown ? CSS.textSecondary : CSS.primary,
+        background: disabled ? CSS.surfaceMuted : CSS.surface,
+        color: disabled ? CSS.textSecondary : CSS.primary,
         border: `1px solid ${CSS.border}`,
         borderRadius: RADIUS.pill,
         padding: "8px 14px",
@@ -175,15 +177,17 @@ function HintButton() {
         fontSize: 14,
         fontWeight: 500,
         lineHeight: 1,
-        cursor: onCooldown ? "not-allowed" : "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
         display: "inline-flex",
         alignItems: "center",
         gap: 8,
       }}
       title={
-        onCooldown
-          ? `Available in ${remainingSec}s`
-          : "Reveal one difference. Hint runs are excluded from the daily leaderboard."
+        hintActive
+          ? "Click the highlighted area to reveal it"
+          : onCooldown
+            ? `Available in ${remainingSec}s`
+            : "Reveal one difference. Hint runs are excluded from the daily leaderboard."
       }
     >
       <span aria-hidden style={{ fontSize: 16 }}>
