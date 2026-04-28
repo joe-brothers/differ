@@ -8,6 +8,7 @@ import { HtmlOverlay } from "../ui/HtmlOverlay";
 import { ApiError, authApi } from "../network/rest";
 import { evaluatePassword, PASSWORD_HINT } from "../managers/passwordStrength";
 import { createBetaBadge } from "../ui/pixiBetaBadge";
+import { createGithubFooter } from "../ui/pixiGithubFooter";
 
 export class MainMenuScene extends Container implements IScene {
   private app: Application;
@@ -657,30 +658,7 @@ export class MainMenuScene extends Container implements IScene {
   }
 
   private createFooter(): void {
-    const sha = __GIT_SHA__;
-    const label = sha
-      ? `github.com/joe-brothers/differ (${sha})`
-      : "github.com/joe-brothers/differ";
-    this.footerText = new Text({
-      text: label,
-      style: {
-        fontFamily: "Arial, sans-serif",
-        fontSize: 12,
-        fill: COLORS.textSecondary,
-      },
-    });
-    this.footerText.anchor.set(0.5, 1);
-    this.footerText.eventMode = "static";
-    this.footerText.cursor = "pointer";
-    this.footerText.on("pointerover", () => {
-      if (this.footerText) this.footerText.style.fill = COLORS.text;
-    });
-    this.footerText.on("pointerout", () => {
-      if (this.footerText) this.footerText.style.fill = COLORS.textSecondary;
-    });
-    this.footerText.on("pointerdown", () => {
-      window.open("https://github.com/joe-brothers/differ", "_blank", "noopener,noreferrer");
-    });
+    this.footerText = createGithubFooter();
     this.positionFooter();
     this.addChild(this.footerText);
   }

@@ -3,6 +3,7 @@ import type { IScene } from "../types";
 import { COLORS } from "../constants";
 import { HtmlOverlay } from "../ui/HtmlOverlay";
 import { createBetaBadge } from "../ui/pixiBetaBadge";
+import { createGithubFooter } from "../ui/pixiGithubFooter";
 import { authState } from "../managers/AuthStateManager";
 import { ApiError, authApi } from "../network/rest";
 import { game } from "../core/Game";
@@ -16,6 +17,7 @@ export class AuthScene extends Container implements IScene {
   private title: Text | null = null;
   private logo: Sprite | null = null;
   private betaBadge: Container | null = null;
+  private footerText: Text | null = null;
   private view: AuthView = "chooser";
   private totpTicket: string | null = null;
 
@@ -26,7 +28,19 @@ export class AuthScene extends Container implements IScene {
 
   async init(): Promise<void> {
     this.createTitle();
+    this.createFooter();
     this.render();
+  }
+
+  private createFooter(): void {
+    this.footerText = createGithubFooter();
+    this.positionFooter();
+    this.addChild(this.footerText);
+  }
+
+  private positionFooter(): void {
+    if (!this.footerText) return;
+    this.footerText.position.set(this.app.screen.width / 2, this.app.screen.height - 16);
   }
 
   private createTitle(): void {
@@ -481,6 +495,7 @@ export class AuthScene extends Container implements IScene {
 
   resize(_width: number, _height: number): void {
     this.positionTitle();
+    this.positionFooter();
   }
 
   destroy(): void {
