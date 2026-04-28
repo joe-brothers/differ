@@ -1,5 +1,5 @@
 import { EventEmitter } from "pixi.js";
-import type { PublicUser } from "@differ/shared";
+import type { DailyState, PublicUser } from "@differ/shared";
 import { authApi } from "../network/rest";
 import { getTurnstileToken } from "../network/turnstile";
 
@@ -8,6 +8,7 @@ import { getTurnstileToken } from "../network/turnstile";
 export class AuthStateManager extends EventEmitter {
   private user: PublicUser | null = null;
   private wins = 0;
+  private daily: DailyState | null = null;
 
   getUser(): PublicUser | null {
     return this.user;
@@ -17,6 +18,12 @@ export class AuthStateManager extends EventEmitter {
     return this.wins;
   }
 
+  // Today's daily-challenge state, bundled into /auth/me so the menu can
+  // render played-state + streak without a second round trip.
+  getDaily(): DailyState | null {
+    return this.daily;
+  }
+
   isAuthenticated(): boolean {
     return this.user !== null;
   }
@@ -24,9 +31,10 @@ export class AuthStateManager extends EventEmitter {
   // Called on app start. Asks the server who we are based on the cookie.
   async tryRestore(): Promise<boolean> {
     try {
-      const { user, wins } = await authApi.me();
+      const { user, wins, daily } = await authApi.me();
       this.user = user;
       this.wins = wins;
+      this.daily = daily;
       this.emit("authStateChanged");
       return true;
     } catch {
@@ -39,9 +47,10 @@ export class AuthStateManager extends EventEmitter {
   async refresh(): Promise<void> {
     if (!this.user) return;
     try {
-      const { user, wins } = await authApi.me();
+      const { user, wins, daily } = await authApi.me();
       this.user = user;
       this.wins = wins;
+      this.daily = daily;
       this.emit("authStateChanged");
     } catch {
       // Network blip — keep cached values rather than logging out.
@@ -93,6 +102,7 @@ export class AuthStateManager extends EventEmitter {
     }
     this.user = null;
     this.wins = 0;
+    this.daily = null;
     this.emit("authStateChanged");
   }
 }

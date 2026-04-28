@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import type { Env } from "../env.js";
 import { requireAuth, type AuthEnv } from "../auth/middleware.js";
 import { getDb } from "../db/client.js";
-import { dailyAttempts, gameParticipants, games, userStats } from "../db/schema.js";
+import { dailyAttempts } from "../db/schema.js";
 import { createGameRoom } from "../rooms/create.js";
 import { utcDateKey } from "./service.js";
 
@@ -25,82 +25,6 @@ async function dailyRoomCode(date: string, userId: string): Promise<string> {
   }
   return out;
 }
-
-// GET /daily/today — status for the daily card on the main menu.
-//   - playable: no attempt yet today
-//   - already-played: returns the prior result (elapsedMs, foundCount)
-// Streak is included so the menu can render "Day N streak" without a
-// second round trip.
-dailyRoutes.get("/today", requireAuth, async (c) => {
-  const userId = c.get("user").sub;
-  const date = utcDateKey();
-  const db = getDb(c.env.DB);
-
-  const [attemptRow] = await db
-    .select({ gameId: dailyAttempts.gameId })
-    .from(dailyAttempts)
-    .where(and(eq(dailyAttempts.userId, userId), eq(dailyAttempts.date, date)))
-    .limit(1);
-
-  const [statsRow] = await db
-    .select({
-      current: userStats.currentStreak,
-      longest: userStats.longestStreak,
-      last: userStats.lastDailyDate,
-    })
-    .from(userStats)
-    .where(eq(userStats.userId, userId))
-    .limit(1);
-
-  let result: {
-    elapsedMs: number | null;
-    foundCount: number;
-    outcome: string;
-    hintsUsed: number;
-  } | null = null;
-  if (attemptRow) {
-    const [participant] = await db
-      .select({
-        elapsedMs: gameParticipants.elapsedMs,
-        foundCount: gameParticipants.foundCount,
-        outcome: gameParticipants.outcome,
-        hintsUsed: gameParticipants.hintsUsed,
-      })
-      .from(gameParticipants)
-      .where(
-        and(eq(gameParticipants.gameId, attemptRow.gameId), eq(gameParticipants.userId, userId)),
-      )
-      .limit(1);
-    if (participant) {
-      result = participant;
-    } else {
-      // Guest path — daily_attempts exists, gameParticipants doesn't (D4).
-      // Fall back to the games row so the share card still renders something.
-      const [game] = await db
-        .select({ endReason: games.endReason })
-        .from(games)
-        .where(eq(games.id, attemptRow.gameId))
-        .limit(1);
-      result = {
-        elapsedMs: null,
-        foundCount: 0,
-        outcome: game?.endReason === "winner" ? "win" : "timeout",
-        hintsUsed: 0,
-      };
-    }
-  }
-
-  return c.json({
-    date,
-    played: !!attemptRow,
-    result,
-    streak: {
-      current: statsRow?.current ?? 0,
-      longest: statsRow?.longest ?? 0,
-      lastDailyDate: statsRow?.last ?? null,
-    },
-  });
-});
 
 // POST /daily/start — start (or resume) today's daily attempt.
 //   - if already played today: 409 daily_already_played

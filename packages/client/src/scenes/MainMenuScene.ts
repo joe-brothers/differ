@@ -5,7 +5,7 @@ import { COLORS } from "../constants";
 import { game } from "../core/Game";
 import { authState } from "../managers/AuthStateManager";
 import { HtmlOverlay } from "../ui/HtmlOverlay";
-import { ApiError, authApi, dailyApi, type DailyTodayRes } from "../network/rest";
+import { ApiError, authApi } from "../network/rest";
 import { evaluatePassword, PASSWORD_HINT } from "../managers/passwordStrength";
 import { createBetaBadge } from "../ui/pixiBetaBadge";
 
@@ -30,7 +30,6 @@ export class MainMenuScene extends Container implements IScene {
   private footerText: Text | null = null;
   private upgradeOverlay: HtmlOverlay | null = null;
   private settingsOverlay: HtmlOverlay | null = null;
-  private dailyToday: DailyTodayRes | null = null;
 
   constructor(app: Application) {
     super();
@@ -51,21 +50,19 @@ export class MainMenuScene extends Container implements IScene {
     }
     this.createUserInfo();
     this.createFooter();
-    // Pull fresh stats (wins) so the counter reflects games played in the
-    // last session — fire-and-forget so the menu still draws instantly.
-    void authState.refresh().then(() => this.refreshUserInfo());
-    // Daily status — also fire-and-forget. Renders the button label as
-    // "Played today" / "Play" and updates the streak line in the corner.
-    void dailyApi
-      .today()
-      .then((res) => {
-        this.dailyToday = res;
-        this.refreshDailyButton();
-        this.refreshStreak();
-      })
-      .catch(() => {
-        /* leave the button in default "Daily Challenge" state */
-      });
+    // Pull fresh /auth/me (wins + daily state) so the counter, daily button,
+    // and streak line reflect the latest session — fire-and-forget so the menu
+    // still draws instantly. Daily is bundled into /auth/me (single round
+    // trip) and the lazy streak reset runs server-side on that call.
+    void authState.refresh().then(() => {
+      this.refreshUserInfo();
+      this.refreshDailyButton();
+      this.refreshStreak();
+    });
+    // Render whatever cached state we already have so the corner labels
+    // aren't blank during the in-flight refresh.
+    this.refreshDailyButton();
+    this.refreshStreak();
   }
 
   private createTitle(): void {
@@ -171,7 +168,7 @@ export class MainMenuScene extends Container implements IScene {
   }
 
   private isDailyDisabled(): boolean {
-    return !!this.dailyToday?.played;
+    return !!authState.getDaily()?.played;
   }
 
   // (i) icon next to the Daily button. Hover surfaces a small tooltip card
@@ -335,9 +332,10 @@ export class MainMenuScene extends Container implements IScene {
 
   private refreshDailyButton(): void {
     if (!this.dailyButton) return;
-    const played = this.dailyToday?.played ?? false;
+    const daily = authState.getDaily();
+    const played = daily?.played ?? false;
     const el = this.dailyButton as Container & { __text: Text; __bg: Graphics };
-    const ms = this.dailyToday?.result?.elapsedMs;
+    const ms = daily?.result?.elapsedMs;
     if (played) {
       this.drawFilledButton(el.__bg, 250, 48, COLORS.surfaceMuted);
       el.__bg.stroke({ color: COLORS.border, width: 1 });
@@ -354,7 +352,7 @@ export class MainMenuScene extends Container implements IScene {
 
   private refreshStreak(): void {
     if (!this.streakText) return;
-    const cur = this.dailyToday?.streak.current ?? 0;
+    const cur = authState.getDaily()?.streak.current ?? 0;
     this.streakText.text = cur > 0 ? `🔥 ${cur}-day streak` : "";
   }
 
@@ -566,7 +564,7 @@ export class MainMenuScene extends Container implements IScene {
       this.addChild(this.winsText);
       nextY += 22;
 
-      // Streak — populated lazily by refreshStreak() once dailyApi.today()
+      // Streak — populated lazily by refreshStreak() once authState.refresh()
       // resolves. Empty until then so the corner doesn't flash text.
       this.streakText = new Text({
         text: "",

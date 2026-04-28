@@ -16,11 +16,33 @@ export const AuthRes = z.object({
 });
 export type AuthRes = z.infer<typeof AuthRes>;
 
+// Daily-challenge state for the current user (today UTC). Bundled into
+// /auth/me so the menu only needs one round trip on session start.
+export const DailyState = z.object({
+  date: z.string(),
+  played: z.boolean(),
+  result: z
+    .object({
+      elapsedMs: z.number().int().nonnegative().nullable(),
+      foundCount: z.number().int().nonnegative(),
+      outcome: z.string(),
+      hintsUsed: z.number().int().nonnegative(),
+    })
+    .nullable(),
+  streak: z.object({
+    current: z.number().int().nonnegative(),
+    longest: z.number().int().nonnegative(),
+    lastDailyDate: z.string().nullable(),
+  }),
+});
+export type DailyState = z.infer<typeof DailyState>;
+
 // /auth/me extends AuthRes with stats the client surfaces in the menu.
 // Kept separate so other endpoints don't have to compute the join.
 export const MeRes = z.object({
   user: PublicUser,
   wins: z.number().int().nonnegative(),
+  daily: DailyState,
 });
 export type MeRes = z.infer<typeof MeRes>;
 

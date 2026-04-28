@@ -1,9 +1,22 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import { Puzzle, RectArea, PUZZLES_PER_GAME, DIFFS_PER_PUZZLE } from "@differ/shared";
+import { and, eq, sql } from "drizzle-orm";
+import {
+  Puzzle,
+  RectArea,
+  PUZZLES_PER_GAME,
+  DIFFS_PER_PUZZLE,
+  type DailyState,
+} from "@differ/shared";
 import type { Env } from "../env.js";
 import { getDb } from "../db/client.js";
-import { dailyPuzzles, puzzles } from "../db/schema.js";
+import {
+  dailyAttempts,
+  dailyPuzzles,
+  gameParticipants,
+  games,
+  puzzles,
+  userStats,
+} from "../db/schema.js";
 import type { RoundPuzzle } from "../puzzles/service.js";
 
 // Stored shape: array of { puzzleId, diffIds[] }. Loaded back into RoundPuzzle
@@ -24,6 +37,87 @@ const StoredDifferences = z.array(RectArea);
 // daily-key boundary; all clients see the same set regardless of timezone.
 export function utcDateKey(d: Date = new Date()): string {
   return d.toISOString().slice(0, 10);
+}
+
+// Fetches today's daily state (attempt + result + streak) for a user, with a
+// lazy streak reset baked in: writes only happen on daily completion, so a
+// user who skips a day keeps a stale `currentStreak` until they play again.
+// Treating the streak as broken when `lastDailyDate` is older than yesterday
+// (and persisting the reset) keeps reads consistent. Bundled into /auth/me
+// so the menu only needs one round trip on session start.
+export async function getDailyState(dbBinding: D1Database, userId: string): Promise<DailyState> {
+  const db = getDb(dbBinding);
+  const date = utcDateKey();
+
+  const [attemptRow] = await db
+    .select({ gameId: dailyAttempts.gameId })
+    .from(dailyAttempts)
+    .where(and(eq(dailyAttempts.userId, userId), eq(dailyAttempts.date, date)))
+    .limit(1);
+
+  const [statsRow] = await db
+    .select({
+      current: userStats.currentStreak,
+      longest: userStats.longestStreak,
+      last: userStats.lastDailyDate,
+    })
+    .from(userStats)
+    .where(eq(userStats.userId, userId))
+    .limit(1);
+
+  const yday = utcDateKey(new Date(Date.parse(date + "T00:00:00Z") - 24 * 60 * 60 * 1000));
+  let currentStreak = statsRow?.current ?? 0;
+  if (statsRow && currentStreak > 0 && statsRow.last !== date && statsRow.last !== yday) {
+    currentStreak = 0;
+    await db
+      .update(userStats)
+      .set({ currentStreak: 0, updatedAt: sql`(datetime('now'))` })
+      .where(eq(userStats.userId, userId));
+  }
+
+  let result: DailyState["result"] = null;
+  if (attemptRow) {
+    const [participant] = await db
+      .select({
+        elapsedMs: gameParticipants.elapsedMs,
+        foundCount: gameParticipants.foundCount,
+        outcome: gameParticipants.outcome,
+        hintsUsed: gameParticipants.hintsUsed,
+      })
+      .from(gameParticipants)
+      .where(
+        and(eq(gameParticipants.gameId, attemptRow.gameId), eq(gameParticipants.userId, userId)),
+      )
+      .limit(1);
+    if (participant) {
+      result = participant;
+    } else {
+      // Guest path — daily_attempts exists, gameParticipants doesn't (D4).
+      // Fall back to the games row so the share card still renders something.
+      const [game] = await db
+        .select({ endReason: games.endReason })
+        .from(games)
+        .where(eq(games.id, attemptRow.gameId))
+        .limit(1);
+      result = {
+        elapsedMs: null,
+        foundCount: 0,
+        outcome: game?.endReason === "winner" ? "win" : "timeout",
+        hintsUsed: 0,
+      };
+    }
+  }
+
+  return {
+    date,
+    played: !!attemptRow,
+    result,
+    streak: {
+      current: currentStreak,
+      longest: statsRow?.longest ?? 0,
+      lastDailyDate: statsRow?.last ?? null,
+    },
+  };
 }
 
 function shuffle<T>(arr: T[]): T[] {

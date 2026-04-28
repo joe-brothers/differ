@@ -17,6 +17,7 @@ import {
 import type { Env } from "../env.js";
 import { getDb } from "../db/client.js";
 import { gameParticipants, games, users } from "../db/schema.js";
+import { getDailyState } from "../daily/service.js";
 import { signToken, signTotpTicket, verifyTotpTicket } from "./jwt.js";
 import { hashPassword, verifyPassword, needsRehash } from "./password.js";
 import { requireAuth, type AuthEnv } from "./middleware.js";
@@ -238,9 +239,14 @@ protectedRoutes.get("/me", async (c) => {
       .get();
     wins = winsRow?.c ?? 0;
   }
+  // Bundled with daily state so the menu can render on a single round trip.
+  // The lazy streak reset (when lastDailyDate < yesterday) lives inside
+  // getDailyState; calling it here means it kicks in on session start.
+  const daily = await getDailyState(c.env.DB, claims.sub);
   return c.json({
     user: { userId: row.id, name: row.name, isGuest: row.isGuest === 1 },
     wins,
+    daily,
   });
 });
 

@@ -158,22 +158,6 @@ export const leaderboardApi = {
   },
 };
 
-export interface DailyTodayRes {
-  date: string;
-  played: boolean;
-  result: {
-    elapsedMs: number | null;
-    foundCount: number;
-    outcome: string;
-    hintsUsed: number;
-  } | null;
-  streak: {
-    current: number;
-    longest: number;
-    lastDailyDate: string | null;
-  };
-}
-
 export interface DailyStartRes {
   roomCode: string;
   wsUrl: string;
@@ -181,9 +165,6 @@ export interface DailyStartRes {
 }
 
 export const dailyApi = {
-  today(): Promise<DailyTodayRes> {
-    return request<DailyTodayRes>("/daily/today");
-  },
   start(): Promise<DailyStartRes> {
     return request<DailyStartRes>("/daily/start", { method: "POST" });
   },
