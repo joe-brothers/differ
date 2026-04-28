@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
+import { dailyNumber } from "@differ/shared";
 import { useUIStore, type OverlayModal } from "../store";
 import { cardStyle, CSS, FONT_MONO, modalBackdropStyle } from "../styles";
 import { Button } from "./Button";
@@ -44,7 +45,7 @@ function buildShareText(args: {
   // Timeouts and hint-assisted finishes don't get the badge — the LinkedIn
   // game-share style cue is meant to convey "no help, no shortcuts."
   const flawless = args.hintsUsed === 0 && args.elapsedSec != null ? " (Flawless ✨)" : "";
-  return `Differ Daily ${args.date} — ${result}${flawless}\n${window.location.origin}`;
+  return `Differ Daily ${args.date} (#${dailyNumber(args.date)}) — ${result}${flawless}\n${window.location.origin}`;
 }
 
 function DailyCompleteCard({
