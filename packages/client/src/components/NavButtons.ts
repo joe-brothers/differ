@@ -6,6 +6,11 @@ export class NavButtons extends Container {
   private nextButton: Container;
   private onPrev: (() => void) | null = null;
   private onNext: (() => void) | null = null;
+  // Last index/total handed to updateState — replayed when the force-disable
+  // flag toggles so we don't lose the natural "first/last image" disabling.
+  private lastIndex = 0;
+  private lastTotal = 1;
+  private forceDisabled = false;
 
   constructor() {
     super();
@@ -87,10 +92,22 @@ export class NavButtons extends Container {
   }
 
   updateState(currentIndex: number, totalImages: number): void {
-    this.prevButton.alpha = currentIndex > 0 ? 1 : 0.4;
-    this.prevButton.eventMode = currentIndex > 0 ? "static" : "none";
+    this.lastIndex = currentIndex;
+    this.lastTotal = totalImages;
+    this.applyState();
+  }
 
-    this.nextButton.alpha = currentIndex < totalImages - 1 ? 1 : 0.4;
-    this.nextButton.eventMode = currentIndex < totalImages - 1 ? "static" : "none";
+  setForceDisabled(disabled: boolean): void {
+    this.forceDisabled = disabled;
+    this.applyState();
+  }
+
+  private applyState(): void {
+    const prevEnabled = !this.forceDisabled && this.lastIndex > 0;
+    const nextEnabled = !this.forceDisabled && this.lastIndex < this.lastTotal - 1;
+    this.prevButton.alpha = prevEnabled ? 1 : 0.4;
+    this.prevButton.eventMode = prevEnabled ? "static" : "none";
+    this.nextButton.alpha = nextEnabled ? 1 : 0.4;
+    this.nextButton.eventMode = nextEnabled ? "static" : "none";
   }
 }

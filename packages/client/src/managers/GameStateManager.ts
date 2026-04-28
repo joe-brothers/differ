@@ -27,6 +27,7 @@ export class GameStateManager extends EventEmitter {
       pausedAt: null,
       pausedMs: 0,
       hintsUsed: 0,
+      pendingHint: null,
     };
   }
 
@@ -67,6 +68,7 @@ export class GameStateManager extends EventEmitter {
       pausedAt: null,
       pausedMs: 0,
       hintsUsed: existingHintsUsed,
+      pendingHint: null,
     };
     this.emit("gameInitialized");
   }
@@ -119,6 +121,27 @@ export class GameStateManager extends EventEmitter {
     this.state.hintsUsed = total;
   }
 
+  // Enter "hint pending" mode: the server has revealed a diff but we hold
+  // off on marking it found until the player clicks the highlighted rect.
+  // Returns false if the diffId can't be resolved (puzzle/diff missing or
+  // already found) so the caller can decide whether to fall back.
+  enterHintMode(puzzleIdx: number, diffId: string): boolean {
+    if (this.state.mode !== "playing") return false;
+    const diffs = this.state.selectedDifferences[puzzleIdx];
+    if (!diffs) return false;
+    const target = diffs.find((d) => d.rect.id === diffId);
+    if (!target || target.found) return false;
+    this.state.pendingHint = { puzzleIdx, diffId, rect: target.rect };
+    this.emit("hintEntered", this.state.pendingHint);
+    return true;
+  }
+
+  exitHintMode(): void {
+    if (!this.state.pendingHint) return;
+    this.state.pendingHint = null;
+    this.emit("hintExited");
+  }
+
   handleOpponentDifferenceFound(count?: number): void {
     this.state.opponentFoundCount = count ?? this.state.opponentFoundCount + 1;
     this.emit("opponentDifferenceFound", this.state.opponentFoundCount);
@@ -127,6 +150,10 @@ export class GameStateManager extends EventEmitter {
   handleGameEnded(winnerUserId: string | null): void {
     if (this.state.mode === "completed") return;
     this.state.mode = "completed";
+    if (this.state.pendingHint) {
+      this.state.pendingHint = null;
+      this.emit("hintExited");
+    }
     this.emit("gameLost", winnerUserId);
   }
 

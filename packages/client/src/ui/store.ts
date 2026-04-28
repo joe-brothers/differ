@@ -49,6 +49,10 @@ interface UIStore {
   // informational so other UI (the Flawless badge) can read a single source.
   hintsUsed: number;
   hintCooldownUntilMs: number;
+  // True between hint_revealed and the player clicking the highlighted rect.
+  // The HintButton stays disabled while this is set so a second hint can't
+  // be requested before the current one resolves.
+  hintActive: boolean;
 
   // Overlay modal state
   modal: OverlayModal;
@@ -118,6 +122,7 @@ export const useUIStore = create<UIStore>((set) => ({
   timerSec: 0,
   hintsUsed: 0,
   hintCooldownUntilMs: 0,
+  hintActive: false,
   modal: { type: "none" },
   rematchPending: false,
   opponentRematch: false,
@@ -140,6 +145,7 @@ export const useUIStore = create<UIStore>((set) => ({
       // ship a remaining-cooldown value; the worst case is the user gets to
       // hint a touch sooner than they otherwise would have.
       hintCooldownUntilMs: 0,
+      hintActive: false,
       modal: { type: "none" },
       rematchPending: false,
       opponentRematch: false,
@@ -214,4 +220,10 @@ gameState.on("opponentDifferenceFound", (count: number) => {
 });
 gameState.on("reset", () => {
   useUIStore.getState().unmountHud();
+});
+gameState.on("hintEntered", () => {
+  useUIStore.setState({ hintActive: true });
+});
+gameState.on("hintExited", () => {
+  useUIStore.setState({ hintActive: false });
 });
