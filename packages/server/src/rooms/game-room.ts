@@ -608,10 +608,12 @@ export class GameRoom implements DurableObject {
       });
     }
     const db = getDb(this.env.DB);
+    // games row must land before any FK-dependent insert (game_participants,
+    // daily_attempts both reference games.id). D1 dispatches concurrent
+    // prepared statements independently, so Promise.all-ing all of them
+    // races the dependents past the parent and trips SQLITE_CONSTRAINT.
+    await db.insert(games).values(gameRow).run();
     const writes: Promise<unknown>[] = [];
-    // games row is always inserted (any mode, any participant set) so daily
-    // attempts and future analytics have a stable join key.
-    writes.push(db.insert(games).values(gameRow).run());
     if (participantRows.length > 0) {
       writes.push(db.insert(gameParticipants).values(participantRows).run());
     }
