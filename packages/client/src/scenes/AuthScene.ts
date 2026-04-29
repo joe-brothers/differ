@@ -169,6 +169,9 @@ export class AuthScene extends Container implements IScene {
       name: "username",
       autocomplete: "username",
     });
+    const USERNAME_RULE_TEXT = "Letters, digits, and _ . - · 3-32 characters";
+    const usernameHelper = isSignUp ? this.overlay.createHelperText(card) : null;
+    if (usernameHelper) usernameHelper.textContent = USERNAME_RULE_TEXT;
     const passwordInput = isSignUp
       ? this.overlay.createInputWithHint(
           card,
@@ -239,11 +242,20 @@ export class AuthScene extends Container implements IScene {
     // Server-side rules mirrored here so the submit button only becomes
     // clickable once the form would actually be accepted. zxcvbn output
     // (the strength meter) is informational, not part of the gate.
+    const usernameError = (value: string): string | null => {
+      if (value.length === 0) return null;
+      if (value.length < 3) return "Username must be at least 3 characters.";
+      if (value.length > 32) return "Username must be 32 characters or fewer.";
+      if (!/^[A-Za-z0-9_.-]+$/.test(value)) {
+        return "Allowed: letters, digits, and _ . -";
+      }
+      return null;
+    };
     const isSignupValid = (): boolean => {
       const username = usernameInput.value.trim();
       const password = passwordInput.value;
       if (username.length < 3 || username.length > 32) return false;
-      if (!/^[A-Za-z0-9_]+$/.test(username)) return false;
+      if (!/^[A-Za-z0-9_.-]+$/.test(username)) return false;
       if (password.length < 8 || password.length > 128) return false;
       if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return false;
       return true;
@@ -254,6 +266,17 @@ export class AuthScene extends Container implements IScene {
       if (!isSignUp) return;
       overlay.setButtonEnabled(submitBtn, isSignupValid());
     };
+    const refreshUsernameHelper = () => {
+      if (!usernameHelper) return;
+      const err = usernameError(usernameInput.value.trim());
+      if (err) {
+        usernameHelper.textContent = err;
+        usernameHelper.style.color = "#D93025";
+      } else {
+        usernameHelper.textContent = USERNAME_RULE_TEXT;
+        usernameHelper.style.color = "#5F6368";
+      }
+    };
 
     if (isSignUp) {
       overlay.setButtonEnabled(submitBtn, false);
@@ -263,6 +286,7 @@ export class AuthScene extends Container implements IScene {
       });
       usernameInput.addEventListener("input", () => {
         recomputeStrength();
+        refreshUsernameHelper();
         refreshSubmit();
       });
     }

@@ -700,6 +700,9 @@ export class MainMenuScene extends Container implements IScene {
       name: "username",
       autocomplete: "username",
     });
+    const USERNAME_RULE_TEXT = "Letters, digits, and _ . - · 3-32 characters";
+    const usernameHelper = this.upgradeOverlay.createHelperText(card);
+    usernameHelper.textContent = USERNAME_RULE_TEXT;
     const passwordInput = this.upgradeOverlay.createInputWithHint(
       card,
       {
@@ -730,16 +733,35 @@ export class MainMenuScene extends Container implements IScene {
     // the form would actually be accepted (matches AuthScene signup).
     // zxcvbn output is shown via the meter as a nudge, not as a gate.
     const overlay = this.upgradeOverlay;
+    const usernameError = (value: string): string | null => {
+      if (value.length === 0) return null;
+      if (value.length < 3) return "Username must be at least 3 characters.";
+      if (value.length > 32) return "Username must be 32 characters or fewer.";
+      if (!/^[A-Za-z0-9_.-]+$/.test(value)) {
+        return "Allowed: letters, digits, and _ . -";
+      }
+      return null;
+    };
     const isFormValid = (): boolean => {
       const username = usernameInput.value.trim();
       const password = passwordInput.value;
       if (username.length < 3 || username.length > 32) return false;
-      if (!/^[A-Za-z0-9_]+$/.test(username)) return false;
+      if (!/^[A-Za-z0-9_.-]+$/.test(username)) return false;
       if (password.length < 8 || password.length > 128) return false;
       if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return false;
       return true;
     };
     const refreshSubmit = () => overlay.setButtonEnabled(submitBtn, isFormValid());
+    const refreshUsernameHelper = () => {
+      const err = usernameError(usernameInput.value.trim());
+      if (err) {
+        usernameHelper.textContent = err;
+        usernameHelper.style.color = "#D93025";
+      } else {
+        usernameHelper.textContent = USERNAME_RULE_TEXT;
+        usernameHelper.style.color = "#5F6368";
+      }
+    };
     overlay.setButtonEnabled(submitBtn, false);
 
     passwordInput.addEventListener("input", () => {
@@ -748,6 +770,7 @@ export class MainMenuScene extends Container implements IScene {
     });
     usernameInput.addEventListener("input", () => {
       refreshStrength();
+      refreshUsernameHelper();
       refreshSubmit();
     });
 

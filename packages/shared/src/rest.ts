@@ -89,12 +89,16 @@ export const PasswordSchema = z
   .regex(/[A-Za-z]/, "Password must contain at least one letter")
   .regex(/[0-9]/, "Password must contain at least one number");
 
+// Username character set is intentionally narrow: letters, digits, and the
+// punctuation `_ . -`. Excludes whitespace, `@`, slashes, quotes, and HTML
+// metacharacters so a careless `innerHTML` later in the stack can't escalate
+// a name into markup. Anything broader needs an explicit escaping audit.
 export const UpgradeReq = z.object({
   username: z
     .string()
-    .min(3)
-    .max(32)
-    .regex(/^[A-Za-z0-9_]+$/),
+    .min(3, "Username must be at least 3 characters")
+    .max(32, "Username must be 32 characters or fewer")
+    .regex(/^[A-Za-z0-9_.-]+$/, "Username can only contain letters, digits, and _ . -"),
   password: PasswordSchema,
 });
 export type UpgradeReq = z.infer<typeof UpgradeReq>;
