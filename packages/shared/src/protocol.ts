@@ -15,6 +15,14 @@ export const ClientReady = z.object({
 });
 export type ClientReady = z.infer<typeof ClientReady>;
 
+// Sent after the client has finished preloading the puzzle images delivered
+// in `game_prepare`. The server gates the synchronized `game_start` on all
+// online players reporting loaded (or a hard timeout, whichever first).
+export const ClientLoaded = z.object({
+  kind: z.literal("loaded"),
+});
+export type ClientLoaded = z.infer<typeof ClientLoaded>;
+
 export const ClientClick = z.object({
   kind: z.literal("click"),
   puzzleIdx: z.number().int().min(0),
@@ -41,6 +49,7 @@ export type ClientHint = z.infer<typeof ClientHint>;
 export const ClientMsg = z.discriminatedUnion("kind", [
   ClientHello,
   ClientReady,
+  ClientLoaded,
   ClientClick,
   ClientLeave,
   ClientHint,
@@ -124,6 +133,19 @@ export const ServerPlayerReady = z.object({
 });
 export type ServerPlayerReady = z.infer<typeof ServerPlayerReady>;
 
+// First half of the start handshake: server delivers puzzles so each client
+// can preload images, and the client replies with `loaded` once ready. The
+// authoritative `startedAt` is *not* set yet — that arrives in `game_start`
+// after every online player has reported loaded (or after `loadingTimeoutMs`
+// has elapsed, whichever first), so the countdown begins from the same
+// wall-clock instant on every client.
+export const ServerGamePrepare = z.object({
+  kind: z.literal("game_prepare"),
+  puzzles: z.array(Puzzle),
+  loadingTimeoutMs: z.number().int().min(0),
+});
+export type ServerGamePrepare = z.infer<typeof ServerGamePrepare>;
+
 export const ServerGameStart = z.object({
   kind: z.literal("game_start"),
   startedAt: z.number(),
@@ -187,6 +209,7 @@ export const ServerMsg = z.discriminatedUnion("kind", [
   ServerPlayerOffline,
   ServerPlayerOnline,
   ServerPlayerReady,
+  ServerGamePrepare,
   ServerGameStart,
   ServerClickResult,
   ServerGameEnd,

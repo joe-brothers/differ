@@ -37,7 +37,7 @@ interface StoredRoom {
   mode: GameMode;
   status: RoomStatus;
   players: Record<string, StoredPlayer>; // keyed by userId
-  puzzles: RoundPuzzle[] | null; // null until game_start
+  puzzles: RoundPuzzle[] | null; // null until game_prepare
   startedAt: number | null;
   createdAt: number;
   winnerId: string | null;
@@ -47,6 +47,14 @@ interface StoredRoom {
   // who starts at 23:59 UTC and finishes at 00:01 UTC still gets yesterday's
   // puzzle set (and yesterday's daily_attempts row).
   dailyDate?: string;
+  // Set when `game_prepare` is broadcast; cleared once `game_start` fires.
+  // While non-null the room is in the loading-handshake phase — puzzles have
+  // been delivered to clients but the authoritative startedAt has not been
+  // chosen yet. The room status remains "waiting" through this window.
+  loadingStartedAt: number | null;
+  // userIds that have replied with `loaded` during the current loading
+  // window. Empty outside the loading phase.
+  loadedUserIds: string[];
 }
 
 interface SocketAttachment {
@@ -61,10 +69,16 @@ const GAME_TIMEOUT_MS = 10 * 60 * 1000; // 10 min hard cap
 // helpful without trivializing the puzzle (you can't hint-spam through five
 // puzzles in seconds).
 const HINT_COOLDOWN_MS = 10_000;
-// Delay between game_start broadcast and actual play start, to cover
-// per-client image loading + countdown so both clients begin at the same
-// wall-clock moment. The client counts down to `startedAt`.
-const START_COUNTDOWN_MS = 3500;
+// Delay between game_start broadcast and actual play start. By this point
+// every online client has already preloaded images (or the loading window
+// timed out), so this is purely the visible 3-2-1 countdown — both clients
+// count down to the same `startedAt`.
+const START_COUNTDOWN_MS = 3000;
+// Hard cap on how long the server waits for clients to report `loaded`
+// after `game_prepare`. If a slow client misses this window the game still
+// begins; that client just sees a shortened or skipped countdown when it
+// finally finishes loading. Better than holding the other player hostage.
+const LOADING_TIMEOUT_MS = 7000;
 
 // Click anti-abuse: per-player sliding window. Humans cap around 8-10 clicks
 // per second; bots brute-forcing pixel grids go far higher.
@@ -174,6 +188,9 @@ export class GameRoom implements DurableObject {
       case "ready":
         await this.handleReady(attachment.userId);
         break;
+      case "loaded":
+        await this.handleLoaded(attachment.userId);
+        break;
       case "click":
         await this.handleClick(attachment.userId, msg.puzzleIdx, msg.x, msg.y);
         break;
@@ -212,11 +229,13 @@ export class GameRoom implements DurableObject {
     // The user may have already been removed (e.g., handleLeave) — no-op.
     if (!this.room.players[userId]) return;
 
-    if (this.room.status === "in_progress") {
+    if (this.room.status === "in_progress" || this.room.loadingStartedAt) {
       // Soft disconnect; keep the seat for reconnection. The game still ends
       // either when someone completes all diffs or at the 10-minute timeout
       // (which picks a winner from foundCount), so we never auto-forfeit
-      // just because a tab closed.
+      // just because a tab closed. During the loading handshake we also
+      // hold the seat so a quick refresh doesn't tear the room down — the
+      // 7s loading alarm will release the start either way.
       this.broadcast({ kind: "player_offline", userId });
       return;
     }
@@ -255,9 +274,22 @@ export class GameRoom implements DurableObject {
       return;
     }
 
-    // 2) Hard game timeout: 10 minutes from startedAt regardless of who's
+    // 2) Loading handshake timeout: a slow client never reported `loaded`
+    // (or disconnected silently). Force the start anyway so the other
+    // player isn't held hostage.
+    if (
+      this.room.status === "waiting" &&
+      this.room.loadingStartedAt &&
+      this.room.puzzles &&
+      now - this.room.loadingStartedAt >= LOADING_TIMEOUT_MS
+    ) {
+      await this.beginGame();
+    }
+
+    // 3) Hard game timeout: 10 minutes from startedAt regardless of who's
     // online. Winner = the player with the most found diffs; tie → no winner.
     if (
+      this.room &&
       this.room.status === "in_progress" &&
       this.room.startedAt &&
       now - this.room.startedAt >= GAME_TIMEOUT_MS
@@ -315,6 +347,8 @@ export class GameRoom implements DurableObject {
       gamesPlayed: 0,
       lastActivityAt: now,
       dailyDate: mode === "daily" ? dailyDate : undefined,
+      loadingStartedAt: null,
+      loadedUserIds: [],
     };
     await this.persist();
     return new Response(JSON.stringify({ ok: true }), {
@@ -395,10 +429,28 @@ export class GameRoom implements DurableObject {
     // require explicit `ready` from both players (see handleReady).
     if (
       this.room.status === "waiting" &&
+      !this.room.loadingStartedAt &&
       this.room.gamesPlayed === 0 &&
       Object.keys(this.room.players).length >= capacity
     ) {
-      await this.startGame();
+      await this.prepareGame();
+    } else if (
+      // Reconnect during the loading handshake: replay `game_prepare` so the
+      // returning client can preload images and send `loaded`. Without this
+      // they'd sit waiting for a `game_start` that's gated on their
+      // confirmation that never comes. Also drop their prior `loaded` mark
+      // since the fresh client has an empty asset cache.
+      this.room.status === "waiting" &&
+      this.room.loadingStartedAt &&
+      this.room.puzzles
+    ) {
+      this.room.loadedUserIds = this.room.loadedUserIds.filter((id) => id !== userId);
+      await this.persist();
+      this.send(ws, {
+        kind: "game_prepare",
+        puzzles: this.room.puzzles.map((p) => p.puzzle),
+        loadingTimeoutMs: LOADING_TIMEOUT_MS,
+      });
     }
   }
 
@@ -414,14 +466,19 @@ export class GameRoom implements DurableObject {
     const capacity = this.room.mode === "1v1" ? 2 : 1;
     const playerList = Object.values(this.room.players);
     if (playerList.length >= capacity && playerList.every((p) => p.ready)) {
-      await this.startGame();
+      await this.prepareGame();
     } else {
       this.bumpActivity();
       await this.persist();
     }
   }
 
-  private async startGame(): Promise<void> {
+  // Two-phase start. `prepareGame` ships the puzzles to every client and
+  // waits for them to confirm preload; `beginGame` then picks the
+  // synchronized `startedAt` and broadcasts `game_start`. Splitting it this
+  // way means slow image loading on one client never eats into the visible
+  // countdown of the other — and `1` doesn't get clipped to "3-2-시작".
+  private async prepareGame(): Promise<void> {
     if (!this.room) return;
     // Daily uses the day's frozen set (cron-built or lazy-fallback) so every
     // player on a given UTC date sees the exact same puzzles + diff selection.
@@ -430,17 +487,65 @@ export class GameRoom implements DurableObject {
         ? await getDailyRound(this.env, this.room.dailyDate ?? utcDateKey())
         : await buildRound(this.env);
     this.room.puzzles = puzzles;
+    this.room.startedAt = null;
+    this.room.loadingStartedAt = Date.now();
+    this.room.loadedUserIds = [];
+
+    this.broadcast({
+      kind: "game_prepare",
+      puzzles: puzzles.map((p) => p.puzzle),
+      loadingTimeoutMs: LOADING_TIMEOUT_MS,
+    });
+    this.bumpActivity();
+    // Persist so the alarm we schedule next has the loading deadline available
+    // even if the DO hibernates before any client sends `loaded`.
+    await this.persist();
+  }
+
+  private async beginGame(): Promise<void> {
+    if (!this.room || !this.room.puzzles) return;
+    // Idempotent — both the all-loaded path and the loading-timeout alarm
+    // can race here.
+    if (this.room.startedAt) return;
     this.room.status = "in_progress";
-    // Future-dated so both clients can cover image loading + countdown and
-    // then begin counting from the exact same wall-clock instant.
     this.room.startedAt = Date.now() + START_COUNTDOWN_MS;
+    this.room.loadingStartedAt = null;
+    this.room.loadedUserIds = [];
 
     this.broadcast({
       kind: "game_start",
       startedAt: this.room.startedAt,
-      puzzles: puzzles.map((p) => p.puzzle),
+      puzzles: this.room.puzzles.map((p) => p.puzzle),
     });
     this.bumpActivity();
+    await this.persist();
+  }
+
+  private async handleLoaded(userId: string): Promise<void> {
+    if (!this.room) return;
+    // Outside the loading window — either the game already began (alarm or
+    // earlier all-loaded) or `game_prepare` was never broadcast. No-op.
+    if (!this.room.loadingStartedAt || !this.room.puzzles) return;
+    if (this.room.startedAt) return;
+    if (!this.room.players[userId]) return;
+    if (this.room.loadedUserIds.includes(userId)) return;
+    this.room.loadedUserIds.push(userId);
+
+    // "All online" rather than "all players" so a soft-disconnected player
+    // doesn't block the other from starting. The 7s alarm covers cases
+    // where a player went offline mid-load without their socket closing.
+    const online = this.onlineUserIds();
+    let allLoaded = online.size > 0;
+    for (const id of online) {
+      if (!this.room.loadedUserIds.includes(id)) {
+        allLoaded = false;
+        break;
+      }
+    }
+    if (allLoaded) {
+      await this.beginGame();
+      return;
+    }
     await this.persist();
   }
 
@@ -673,6 +778,8 @@ export class GameRoom implements DurableObject {
     this.room.startedAt = null;
     this.room.winnerId = null;
     this.room.gamesPlayed += 1;
+    this.room.loadingStartedAt = null;
+    this.room.loadedUserIds = [];
 
     this.bumpActivity();
     await this.persist();
@@ -848,6 +955,9 @@ export class GameRoom implements DurableObject {
   private async scheduleNextAlarm(): Promise<void> {
     if (!this.room) return;
     const deadlines: number[] = [this.room.lastActivityAt + ROOM_IDLE_TIMEOUT_MS];
+    if (this.room.loadingStartedAt) {
+      deadlines.push(this.room.loadingStartedAt + LOADING_TIMEOUT_MS);
+    }
     if (this.room.status === "in_progress" && this.room.startedAt) {
       deadlines.push(this.room.startedAt + GAME_TIMEOUT_MS);
     }

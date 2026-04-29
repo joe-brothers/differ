@@ -123,12 +123,14 @@ export class GameScene extends Container implements IScene {
     this.loadCurrentImage();
 
     const state = gameState.getState();
-    const remaining = state.serverStartedAt ? state.serverStartedAt - Date.now() : 0;
-    if (remaining > 200) {
-      // Countdown is cosmetic; the authoritative start moment is
-      // state.serverStartedAt — both clients reveal the board at that
-      // instant regardless of their image-load / countdown variance.
-      this.countdownOverlay.play().catch(() => {
+    const startedAt = state.serverStartedAt;
+    const remaining = startedAt ? startedAt - Date.now() : 0;
+    if (startedAt && remaining > 200) {
+      // Countdown frames are anchored to `startedAt` so they're always in
+      // sync with the server's authoritative start instant — image-load
+      // jitter shifts which frame is visible first, never which frames
+      // play. The board reveals exactly at `startedAt`.
+      this.countdownOverlay.play(startedAt).catch(() => {
         /* swallow */
       });
       await new Promise((r) => setTimeout(r, remaining));

@@ -232,6 +232,17 @@ export class Game {
     const socket = new RoomSocket(roomApi.wsUrl(roomCode));
     this.socket = socket;
 
+    // First half of the start handshake: server delivers puzzles ahead of
+    // the synchronized start so we can preload assets, then we tell it
+    // we're ready. The server gates `game_start` on every online client
+    // reporting loaded (or its 7s timeout). Pixi's Assets cache makes the
+    // re-`load` in `game_start` a no-op, so we don't need to stash state
+    // between the two messages.
+    socket.on("game_prepare", async (msg: { puzzles: Puzzle[] }) => {
+      await this.loadPuzzleImages(msg.puzzles);
+      socket.send({ kind: "loaded" });
+    });
+
     // `game_start` is emitted by the server on both first-game auto-start
     // and successful rematch votes. Either way, rebuild state and mount
     // GameScene (the scene manager destroys any prior scene).
