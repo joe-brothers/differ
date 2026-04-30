@@ -199,6 +199,28 @@ export const LeaderboardRes = z.object({
 });
 export type LeaderboardRes = z.infer<typeof LeaderboardRes>;
 
+// Daily result summary — small payload computed live from the same eligibility
+// rules as the leaderboard (mode='daily', outcome='win', hintsUsed=0,
+// non-guest). Bucket is the smallest LinkedIn-style band the user fits, gated
+// by sample size so "top 1%" needs ≥100 players, "top 5%" ≥20, etc.
+export const PercentileBucket = z.enum(["top1", "top5", "top10", "top25", "top50"]);
+export type PercentileBucket = z.infer<typeof PercentileBucket>;
+
+export const DailySummaryQuery = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+export type DailySummaryQuery = z.infer<typeof DailySummaryQuery>;
+
+export const DailySummaryRes = z.object({
+  date: z.string(),
+  totalPlayers: z.number().int().nonnegative(),
+  leaderMs: z.number().int().nonnegative().nullable(),
+  yourMs: z.number().int().nonnegative().nullable(),
+  yourRank: z.number().int().positive().nullable(),
+  bucket: PercentileBucket.nullable(),
+});
+export type DailySummaryRes = z.infer<typeof DailySummaryRes>;
+
 export const ErrorRes = z.object({
   error: z.object({
     code: z.string(),

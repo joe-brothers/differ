@@ -2,6 +2,7 @@ import type {
   AuthRes,
   CreateRoomReq,
   CreateRoomRes,
+  DailySummaryRes,
   LeaderboardRes,
   LoginReq,
   LoginTotpRequiredRes,
@@ -167,5 +168,8 @@ export interface DailyStartRes {
 export const dailyApi = {
   start(): Promise<DailyStartRes> {
     return request<DailyStartRes>("/daily/start", { method: "POST" });
+  },
+  summary(date: string): Promise<DailySummaryRes> {
+    return request<DailySummaryRes>(`/daily/summary?date=${encodeURIComponent(date)}`);
   },
 };

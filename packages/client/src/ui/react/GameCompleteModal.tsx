@@ -1,9 +1,10 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
-import { dailyNumber } from "@differ/shared";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { dailyNumber, type DailySummaryRes, type PercentileBucket } from "@differ/shared";
 import { useUIStore, type OverlayModal } from "../store";
 import { cardStyle, CSS, FONT_MONO, modalBackdropStyle } from "../styles";
 import { Button } from "./Button";
 import { TOTAL_DIFFS_PER_GAME } from "../../constants";
+import { ApiError, dailyApi } from "../../network/rest";
 
 function formatTime(elapsedSec: number): string {
   const minutes = Math.floor(elapsedSec / 60);
@@ -48,6 +49,24 @@ function buildShareText(args: {
   return `Differ Daily ${args.date} (#${dailyNumber(args.date)}) — ${result}${flawless}\n${window.location.origin}`;
 }
 
+const BUCKET_LABEL: Record<PercentileBucket, string> = {
+  top1: "Top 1%",
+  top5: "Top 5%",
+  top10: "Top 10%",
+  top25: "Top 25%",
+  top50: "Top 50%",
+};
+
+function formatGap(ms: number): string {
+  // Sub-minute gaps read more naturally as fractional seconds; longer gaps
+  // shift to whole seconds so the line doesn't trail with noisy decimals.
+  const sec = ms / 1000;
+  if (sec < 60) return `${sec.toFixed(1)}s`;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}m ${s}s`;
+}
+
 function DailyCompleteCard({
   modal,
   onMainMenu,
@@ -58,6 +77,27 @@ function DailyCompleteCard({
   const [copied, setCopied] = useState(false);
   const completed = modal.elapsedSec != null;
   const flawless = completed && modal.hintsUsed === 0;
+  const [summary, setSummary] = useState<DailySummaryRes | null>(null);
+
+  useEffect(() => {
+    // Only flawless completions are eligible for ranking — hint-assisted and
+    // timed-out runs aren't in the qualifying pool, so don't ask the server.
+    if (!flawless) return;
+    let cancelled = false;
+    dailyApi
+      .summary(modal.date)
+      .then((s) => {
+        if (!cancelled) setSummary(s);
+      })
+      .catch((err) => {
+        // Result modal still works without the rank line; swallow non-auth
+        // errors so a flaky network can't block the share/main-menu flow.
+        if (!(err instanceof ApiError)) console.error(err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [flawless, modal.date]);
 
   const onCopy = async () => {
     const text = buildShareText({
@@ -125,6 +165,9 @@ function DailyCompleteCard({
             Flawless ✨
           </div>
         )}
+        {flawless && summary && summary.yourRank != null && (
+          <DailyRankLines summary={summary} yourMs={summary.yourMs!} />
+        )}
         {completed && !flawless && (
           <div style={{ marginTop: 4, fontSize: 13, color: CSS.textSecondary }}>
             {modal.hintsUsed} hint{modal.hintsUsed === 1 ? "" : "s"} used · streak kept, not on
@@ -143,6 +186,38 @@ function DailyCompleteCard({
         </div>
       </div>
     </div>
+  );
+}
+
+function DailyRankLines({ summary, yourMs }: { summary: DailySummaryRes; yourMs: number }) {
+  const isLeader = summary.yourRank === 1;
+  const gapMs =
+    !isLeader && summary.leaderMs != null ? Math.max(0, yourMs - summary.leaderMs) : null;
+  return (
+    <>
+      <div style={{ marginTop: 4, fontSize: 13, color: CSS.textSecondary, textAlign: "center" }}>
+        {isLeader ? (
+          <>🥇 #1 of today</>
+        ) : gapMs != null ? (
+          <>+{formatGap(gapMs)} behind today's leader</>
+        ) : null}
+      </div>
+      {!isLeader && summary.bucket && (
+        <div
+          style={{
+            marginTop: 4,
+            padding: "4px 12px",
+            borderRadius: 9999,
+            fontSize: 14,
+            fontWeight: 500,
+            color: CSS.primary,
+            backgroundColor: CSS.primarySoft,
+          }}
+        >
+          {BUCKET_LABEL[summary.bucket]}
+        </div>
+      )}
+    </>
   );
 }
 

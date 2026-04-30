@@ -23,6 +23,7 @@ import { CelebrationEffect } from "../components/CelebrationEffect";
 import { CountdownOverlay } from "../components/CountdownOverlay";
 import { HintOverlay } from "../components/HintOverlay";
 import { useUIStore } from "../ui/store";
+import { useDebugStore } from "../debug/store";
 
 export class GameScene extends Container implements IScene {
   private app: Application;
@@ -80,6 +81,14 @@ export class GameScene extends Container implements IScene {
   private hintOverlayLeft: HintOverlay | null = null;
   private hintOverlayRight: HintOverlay | null = null;
 
+  // Dev-only diff overlay (debug console "Show diffs" toggle). Rebuilt on
+  // every `loadCurrentImage`; visibility tracked via the debug store
+  // subscription. Both refs and the subscribe call are dead code in prod
+  // builds (Vite strips `if (import.meta.env.DEV)` branches).
+  private debugDiffOverlayLeft: Container | null = null;
+  private debugDiffOverlayRight: Container | null = null;
+  private offDebugStore?: () => void;
+
   constructor(app: Application) {
     super();
     this.app = app;
@@ -106,6 +115,7 @@ export class GameScene extends Container implements IScene {
     this.setupStateListeners();
     this.setupSocketListeners();
     this.setupKeyboardShortcuts();
+    if (import.meta.env.DEV) this.setupDebugOverlay();
 
     // React overlay reads from the store; publish HUD + wire modal callbacks.
     const ui = useUIStore.getState();
@@ -498,6 +508,56 @@ export class GameScene extends Container implements IScene {
 
     this.gameArea.addChild(this.rightPanelContainer);
     this.updateMarkers();
+
+    if (import.meta.env.DEV) this.rebuildDebugOverlay();
+  }
+
+  // Subscribes the scene to the debug store so toggling "Show diffs" reflects
+  // immediately without needing an image change. Stripped from prod builds
+  // along with all `import.meta.env.DEV` callers.
+  private setupDebugOverlay(): void {
+    this.offDebugStore = useDebugStore.subscribe((state, prev) => {
+      if (state.showDiffs === prev.showDiffs) return;
+      this.applyDebugOverlayVisibility(state.showDiffs);
+    });
+  }
+
+  // Rebuilds the per-panel overlay containers after `loadCurrentImage` blew
+  // away the prior ones. Each rect is drawn in puzzle-local coords; the
+  // panels' own `scale = imageScale` handles the on-screen sizing.
+  private rebuildDebugOverlay(): void {
+    const state = gameState.getState();
+    const diffs = state.selectedDifferences[state.currentImageIndex];
+    if (!diffs) return;
+
+    this.debugDiffOverlayLeft = this.makeDebugOverlay(diffs);
+    this.debugDiffOverlayRight = this.makeDebugOverlay(diffs);
+    this.leftPanel?.addChild(this.debugDiffOverlayLeft);
+    this.rightPanelContainer.addChild(this.debugDiffOverlayRight);
+
+    this.applyDebugOverlayVisibility(useDebugStore.getState().showDiffs);
+  }
+
+  private makeDebugOverlay(diffs: { rect: DiffRect }[]): Container {
+    const container = new Container();
+    // Don't intercept clicks — the rectangles are purely cosmetic. The hit
+    // area below them stays interactive so the player can still solve via
+    // clicking, which is the point of having the answers visible.
+    container.eventMode = "none";
+    for (const d of diffs) {
+      const g = new Graphics();
+      g.rect(d.rect.start_point.x, d.rect.start_point.y, d.rect.width, d.rect.height);
+      g.fill({ color: 0xff00ff, alpha: 0.25 });
+      g.stroke({ width: 2, color: 0xff00ff, alpha: 0.9 });
+      g.eventMode = "none";
+      container.addChild(g);
+    }
+    return container;
+  }
+
+  private applyDebugOverlayVisibility(visible: boolean): void {
+    if (this.debugDiffOverlayLeft) this.debugDiffOverlayLeft.visible = visible;
+    if (this.debugDiffOverlayRight) this.debugDiffOverlayRight.visible = visible;
   }
 
   private createRightHitArea(): Container {
@@ -712,6 +772,7 @@ export class GameScene extends Container implements IScene {
     this.offPlayerReady?.();
     this.offHintRevealed?.();
     this.offKeyDown?.();
+    this.offDebugStore?.();
     for (const off of this.offStateListeners) off();
     this.offStateListeners = [];
 
