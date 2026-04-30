@@ -1,8 +1,10 @@
 import type { CSSProperties } from "react";
 
 // DESIGN.md — Chromium Issue Tracker–inspired theme.
-// Single source of truth for the React/DOM layer. Pixi-side colors live in
-// constants.ts (numeric form) and must mirror the values below.
+// Single source of truth for the React/DOM layer. All values are CSS
+// variables defined in public/style.css so light/dark switches automatically
+// when ThemeManager flips `data-theme` on <html> — no React re-render needed.
+// Pixi-side numeric mirrors live in constants.ts.
 
 export const FONT_FAMILY =
   '"Google Sans", "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -10,38 +12,38 @@ export const FONT_MONO = '"Roboto Mono", "JetBrains Mono", ui-monospace, monospa
 
 export const CSS = {
   // Surfaces
-  background: "#FFFFFF",
-  surface: "#FFFFFF",
-  panel: "#FFFFFF",
-  surfaceMuted: "#F8F9FA",
-  surfaceSunken: "#F1F3F4",
-  border: "#DADCE0",
-  borderStrong: "#BDC1C6",
+  background: "var(--bg)",
+  surface: "var(--surface)",
+  panel: "var(--surface)",
+  surfaceMuted: "var(--surface-muted)",
+  surfaceSunken: "var(--surface-sunken)",
+  border: "var(--border)",
+  borderStrong: "var(--border-strong)",
 
   // Text
-  text: "#202124",
-  textSecondary: "#5F6368",
-  textTertiary: "#80868B",
+  text: "var(--text)",
+  textSecondary: "var(--text-secondary)",
+  textTertiary: "var(--text-tertiary)",
 
   // Accent (primary blue)
-  primary: "#1A73E8",
-  primaryHover: "#1B66C9",
-  primaryPressed: "#1557B0",
-  primarySoft: "#E8F0FE",
-  primaryOn: "#FFFFFF",
+  primary: "var(--primary)",
+  primaryHover: "var(--primary-hover)",
+  primaryPressed: "var(--primary-pressed)",
+  primarySoft: "var(--primary-soft)",
+  primaryOn: "var(--primary-on)",
 
   // Status pairs (text + tinted bg)
-  success: "#188038",
-  successBg: "#E6F4EA",
-  warning: "#B06000",
-  warningBg: "#FEF7E0",
-  error: "#D93025",
-  errorBg: "#FCE8E6",
+  success: "var(--success)",
+  successBg: "var(--success-bg)",
+  warning: "var(--warning)",
+  warningBg: "var(--warning-bg)",
+  error: "var(--error)",
+  errorBg: "var(--error-bg)",
 
   // Misc
-  gold: "#F9AB00",
-  disabled: "#DADCE0",
-  disabledText: "#80868B",
+  gold: "var(--gold)",
+  disabled: "var(--disabled)",
+  disabledText: "var(--disabled-text)",
 };
 
 export const RADIUS = {
@@ -52,8 +54,8 @@ export const RADIUS = {
 };
 
 export const SHADOW = {
-  s1: "0 1px 2px 0 rgba(60,64,67,.08), 0 1px 3px 1px rgba(60,64,67,.06)",
-  s2: "0 2px 6px 2px rgba(60,64,67,.10), 0 1px 2px 0 rgba(60,64,67,.06)",
+  s1: "var(--shadow-1)",
+  s2: "var(--shadow-2)",
 };
 
 // Filled button. The Chromium tracker uses outlined "secondary" buttons too,
@@ -90,11 +92,13 @@ export const cardStyle: CSSProperties = {
   color: CSS.text,
 };
 
+// `alpha` is kept as an API knob so callers (PauseModal, GameCompleteModal)
+// can dial the scrim. We bake it into a per-call rgba so the modal can stay
+// at 0.5 even though the global --scrim is tuned for ~0.6.
 export const modalBackdropStyle = (alpha = 0.6): CSSProperties => ({
   position: "absolute",
   inset: 0,
-  // Chromium uses a neutral charcoal scrim, not pure black.
-  backgroundColor: `rgba(32, 33, 36, ${alpha})`,
+  backgroundColor: scrimColor(alpha),
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
@@ -103,3 +107,13 @@ export const modalBackdropStyle = (alpha = 0.6): CSSProperties => ({
   // #react-root sets pointer-events: none; modals re-enable to capture clicks.
   pointerEvents: "auto",
 });
+
+// Modal scrim. Light theme: neutral charcoal (matches Chromium). Dark: pure
+// black so the dimmed background reads as "darker than the surface."
+function scrimColor(alpha: number): string {
+  if (typeof document !== "undefined") {
+    const t = document.documentElement.getAttribute("data-theme");
+    if (t === "dark") return `rgba(0, 0, 0, ${alpha})`;
+  }
+  return `rgba(32, 33, 36, ${alpha})`;
+}

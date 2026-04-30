@@ -107,7 +107,7 @@ export class AuthScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Welcome";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 12px 0",
       fontSize: "22px",
       fontWeight: "500",
@@ -155,7 +155,7 @@ export class AuthScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = isSignUp ? "Create Account" : "Sign In";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 8px 0",
       fontSize: "22px",
       fontWeight: "500",
@@ -205,7 +205,7 @@ export class AuthScene extends Container implements IScene {
       forgot.textContent = "Forgot password?";
       forgot.href = "#";
       Object.assign(forgot.style, {
-        color: "#1A73E8",
+        color: "var(--primary)",
         fontFamily: "inherit",
         fontSize: "12px",
         textAlign: "center",
@@ -271,10 +271,10 @@ export class AuthScene extends Container implements IScene {
       const err = usernameError(usernameInput.value.trim());
       if (err) {
         usernameHelper.textContent = err;
-        usernameHelper.style.color = "#D93025";
+        usernameHelper.style.color = "var(--error)";
       } else {
         usernameHelper.textContent = USERNAME_RULE_TEXT;
-        usernameHelper.style.color = "#5F6368";
+        usernameHelper.style.color = "var(--text-secondary)";
       }
     };
 
@@ -360,7 +360,7 @@ export class AuthScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Two-Factor Code";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 8px 0",
       fontSize: "22px",
       fontWeight: "500",
@@ -371,7 +371,7 @@ export class AuthScene extends Container implements IScene {
     const blurb = document.createElement("p");
     blurb.textContent = "Enter the 6-digit code from your authenticator app.";
     Object.assign(blurb.style, {
-      color: "#5F6368",
+      color: "var(--text-secondary)",
       fontSize: "13px",
       textAlign: "center",
       margin: "0 0 12px 0",
@@ -447,7 +447,7 @@ export class AuthScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Reset Password";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 8px 0",
       fontSize: "22px",
       fontWeight: "500",
@@ -459,7 +459,7 @@ export class AuthScene extends Container implements IScene {
     blurb.textContent =
       "Enter your username or email. If a matching account exists, we'll send a reset link. (Email delivery is mocked for now.)";
     Object.assign(blurb.style, {
-      color: "#5F6368",
+      color: "var(--text-secondary)",
       fontSize: "13px",
       textAlign: "center",
       margin: "0 0 12px 0",
@@ -485,7 +485,7 @@ export class AuthScene extends Container implements IScene {
     const submit = async () => {
       const value = idInput.value.trim();
       if (!value) {
-        status.style.color = "#D93025";
+        status.style.color = "var(--error)";
         status.textContent = "Enter a username or email.";
         return;
       }
@@ -494,11 +494,11 @@ export class AuthScene extends Container implements IScene {
       try {
         const isEmail = value.includes("@");
         await authApi.forgotPassword(isEmail ? { email: value } : { username: value });
-        status.style.color = "#188038";
+        status.style.color = "var(--success)";
         status.textContent = "If an account matches, you'll receive an email shortly.";
       } catch {
         // Mocked endpoint always succeeds; treat any failure as transient.
-        status.style.color = "#188038";
+        status.style.color = "var(--success)";
         status.textContent = "If an account matches, you'll receive an email shortly.";
       } finally {
         stopDots();

@@ -676,7 +676,7 @@ export class MainMenuScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Save Account";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 8px 0",
       fontSize: "20px",
       fontWeight: "500",
@@ -687,7 +687,7 @@ export class MainMenuScene extends Container implements IScene {
     const blurb = document.createElement("p");
     blurb.textContent = "Pick a username and password to keep your guest progress.";
     Object.assign(blurb.style, {
-      color: "#5F6368",
+      color: "var(--text-secondary)",
       fontSize: "13px",
       textAlign: "center",
       margin: "0 0 12px 0",
@@ -756,10 +756,10 @@ export class MainMenuScene extends Container implements IScene {
       const err = usernameError(usernameInput.value.trim());
       if (err) {
         usernameHelper.textContent = err;
-        usernameHelper.style.color = "#D93025";
+        usernameHelper.style.color = "var(--error)";
       } else {
         usernameHelper.textContent = USERNAME_RULE_TEXT;
-        usernameHelper.style.color = "#5F6368";
+        usernameHelper.style.color = "var(--text-secondary)";
       }
     };
     overlay.setButtonEnabled(submitBtn, false);
@@ -832,7 +832,7 @@ export class MainMenuScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Account";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 8px 0",
       fontSize: "20px",
       fontWeight: "500",
@@ -842,7 +842,7 @@ export class MainMenuScene extends Container implements IScene {
 
     const status = document.createElement("p");
     Object.assign(status.style, {
-      color: "#5F6368",
+      color: "var(--text-secondary)",
       fontSize: "13px",
       textAlign: "center",
       margin: "0 0 8px 0",
@@ -858,7 +858,7 @@ export class MainMenuScene extends Container implements IScene {
       currentEmail = e.email;
       status.textContent = "";
     } catch {
-      status.style.color = "#D93025";
+      status.style.color = "var(--error)";
       status.textContent = "Could not load account state.";
       return;
     }
@@ -899,7 +899,7 @@ export class MainMenuScene extends Container implements IScene {
       margin: "0",
       fontSize: "14px",
       fontWeight: "500",
-      color: "#202124",
+      color: "var(--text)",
     });
     dyn.appendChild(totpHeader);
 
@@ -907,7 +907,11 @@ export class MainMenuScene extends Container implements IScene {
     totpBlurb.textContent = totpEnabled
       ? "2FA is enabled. You'll need a code from your authenticator app to sign in."
       : "Add a one-time code requirement using an authenticator app (Google Authenticator, 1Password, etc).";
-    Object.assign(totpBlurb.style, { color: "#5F6368", fontSize: "13px", margin: "0" });
+    Object.assign(totpBlurb.style, {
+      color: "var(--text-secondary)",
+      fontSize: "13px",
+      margin: "0",
+    });
     dyn.appendChild(totpBlurb);
 
     if (totpEnabled) {
@@ -962,7 +966,7 @@ export class MainMenuScene extends Container implements IScene {
       margin: "0",
       fontSize: "14px",
       fontWeight: "500",
-      color: "#202124",
+      color: "var(--text)",
     });
     dyn.appendChild(emailHeader);
 
@@ -970,7 +974,11 @@ export class MainMenuScene extends Container implements IScene {
     emailBlurb.textContent = currentEmail
       ? `Current: ${currentEmail}. (No email is actually sent yet.)`
       : "Add an email so you can receive a password-reset link. (No email is actually sent yet.)";
-    Object.assign(emailBlurb.style, { color: "#5F6368", fontSize: "13px", margin: "0" });
+    Object.assign(emailBlurb.style, {
+      color: "var(--text-secondary)",
+      fontSize: "13px",
+      margin: "0",
+    });
     dyn.appendChild(emailBlurb);
 
     const emailInput = overlay.createInput(dyn, {
@@ -985,18 +993,18 @@ export class MainMenuScene extends Container implements IScene {
     saveEmailBtn.addEventListener("click", async () => {
       const value = emailInput.value.trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-        emailErr.style.color = "#D93025";
+        emailErr.style.color = "var(--error)";
         emailErr.textContent = "Enter a valid email.";
         return;
       }
       saveEmailBtn.disabled = true;
       try {
         await authApi.setEmail(value);
-        emailErr.style.color = "#188038";
+        emailErr.style.color = "var(--success)";
         emailErr.textContent = "Saved. (Verification not implemented yet.)";
         this.renderSettingsBody(card, totpEnabled, value);
       } catch (err) {
-        emailErr.style.color = "#D93025";
+        emailErr.style.color = "var(--error)";
         if (err instanceof ApiError && err.code === "email_taken") {
           emailErr.textContent = "Email already in use.";
         } else {
@@ -1027,7 +1035,7 @@ export class MainMenuScene extends Container implements IScene {
     const blurb = document.createElement("p");
     blurb.textContent =
       "Scan the QR code with your authenticator app, then enter the 6-digit code below.";
-    Object.assign(blurb.style, { color: "#5F6368", fontSize: "13px", margin: "0" });
+    Object.assign(blurb.style, { color: "var(--text-secondary)", fontSize: "13px", margin: "0" });
     dyn.appendChild(blurb);
 
     let setup: { secret: string; otpauthUrl: string };
@@ -1035,7 +1043,7 @@ export class MainMenuScene extends Container implements IScene {
       setup = await authApi.totpSetup();
     } catch (err) {
       const msg = document.createElement("p");
-      Object.assign(msg.style, { color: "#D93025", fontSize: "13px", margin: "0" });
+      Object.assign(msg.style, { color: "var(--error)", fontSize: "13px", margin: "0" });
       msg.textContent = err instanceof ApiError ? err.message : "Could not start setup.";
       dyn.appendChild(msg);
       return;
@@ -1052,7 +1060,7 @@ export class MainMenuScene extends Container implements IScene {
 
     const secretLine = document.createElement("p");
     Object.assign(secretLine.style, {
-      color: "#5F6368",
+      color: "var(--text-secondary)",
       fontSize: "12px",
       fontFamily: "ui-monospace, monospace",
       margin: "0",

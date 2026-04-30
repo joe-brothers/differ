@@ -80,6 +80,16 @@ export class Game {
     return this.socket;
   }
 
+  // True when the active scene is a live game — theme switches skip scene
+  // refresh in that case so the player doesn't lose their in-flight state.
+  isInGame(): boolean {
+    return this.sceneManager.getCurrentSceneClass() === GameScene;
+  }
+
+  async refreshCurrentScene(): Promise<void> {
+    await this.sceneManager.refresh();
+  }
+
   async start(): Promise<void> {
     const restored = await authState.tryRestore();
     if (!restored) {

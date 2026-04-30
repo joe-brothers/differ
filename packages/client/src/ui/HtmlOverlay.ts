@@ -1,15 +1,16 @@
-// Mirrors a subset of CSS tokens from src/ui/styles.ts. Kept inline so this
-// module stays a plain DOM helper with no React dependency.
+// Mirrors a subset of CSS tokens from src/ui/styles.ts. Values are CSS vars
+// so the overlay automatically picks up light/dark when ThemeManager flips
+// the `data-theme` attribute on <html>.
 const TOKENS = {
-  surface: "#FFFFFF",
-  surfaceSunken: "#F1F3F4",
-  border: "#DADCE0",
-  borderStrong: "#BDC1C6",
-  text: "#202124",
-  textSecondary: "#5F6368",
-  primary: "#1A73E8",
-  primaryOn: "#FFFFFF",
-  error: "#D93025",
+  surface: "var(--surface)",
+  surfaceSunken: "var(--surface-sunken)",
+  border: "var(--border)",
+  borderStrong: "var(--border-strong)",
+  text: "var(--text)",
+  textSecondary: "var(--text-secondary)",
+  primary: "var(--primary)",
+  primaryOn: "var(--primary-on)",
+  error: "var(--error)",
 } as const;
 
 const FONT_FAMILY =
@@ -84,7 +85,7 @@ export class HtmlOverlay {
     });
     input.addEventListener("focus", () => {
       input.style.borderColor = TOKENS.primary;
-      input.style.boxShadow = `0 0 0 2px ${TOKENS.primary}33`;
+      input.style.boxShadow = `0 0 0 2px var(--primary-focus)`;
     });
     input.addEventListener("blur", () => {
       input.style.borderColor = TOKENS.border;
@@ -452,12 +453,14 @@ export class HtmlOverlay {
 
     // 0/1 fail (red), 2 passes but is still weak (amber), 3/4 are clearly
     // good (green). Mirrors the submit gate (passes at ≥ 2).
+    // Strength meter ramps red → amber → green. The amber/green steps reuse
+    // the warning + success theme tokens so dark mode can desaturate them.
     const COLORS_BY_SCORE: Record<number, string> = {
       0: TOKENS.error,
       1: TOKENS.error,
-      2: "#F9AB00",
-      3: "#1E8E3E",
-      4: "#188038",
+      2: "var(--warning)",
+      3: "var(--success)",
+      4: "var(--success)",
     };
     return {
       element: wrap,

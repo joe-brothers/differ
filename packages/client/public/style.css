@@ -1,8 +1,102 @@
+/* Theme tokens — light is the default. ThemeManager toggles
+ * `data-theme="light"` or `data-theme="dark"` on <html> to override.
+ * When no override is set we fall back to prefers-color-scheme via the
+ * @media block below. */
+
+:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-muted: #f8f9fa;
+  --surface-sunken: #f1f3f4;
+  --border: #dadce0;
+  --border-strong: #bdc1c6;
+
+  --text: #202124;
+  --text-secondary: #5f6368;
+  --text-tertiary: #80868b;
+
+  --primary: #1a73e8;
+  --primary-hover: #1b66c9;
+  --primary-pressed: #1557b0;
+  --primary-soft: #e8f0fe;
+  --primary-on: #ffffff;
+  /* 20% alpha of primary, used for focus rings + tinted borders. Defined
+   * per-theme so we don't have to color-mix at every call site. */
+  --primary-focus: rgba(26, 115, 232, 0.2);
+
+  --success: #188038;
+  --success-bg: #e6f4ea;
+  --warning: #b06000;
+  --warning-bg: #fef7e0;
+  --error: #d93025;
+  --error-bg: #fce8e6;
+
+  --scrim: rgba(32, 33, 36, 0.6);
+  --shadow-1: 0 1px 2px 0 rgba(60, 64, 67, 0.08), 0 1px 3px 1px rgba(60, 64, 67, 0.06);
+  --shadow-2: 0 2px 6px 2px rgba(60, 64, 67, 0.1), 0 1px 2px 0 rgba(60, 64, 67, 0.06);
+
+  --gold: #f9ab00;
+  --disabled: #dadce0;
+  --disabled-text: #80868b;
+
+  /* Debug console inverts the app theme so it always stands out from the
+   * canvas. Light app → dark panel, dark app → light panel. */
+  --debug-bg: rgba(17, 24, 39, 0.92);
+  --debug-text: #e5e7eb;
+  --debug-border: rgba(255, 255, 255, 0.1);
+  --debug-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #202124;
+  --surface: #2d2e31;
+  --surface-muted: #303134;
+  --surface-sunken: #1f2023;
+  --border: #3c4043;
+  --border-strong: #5f6368;
+
+  --text: #e8eaed;
+  --text-secondary: #9aa0a6;
+  --text-tertiary: #80868b;
+
+  --primary: #8ab4f8;
+  --primary-hover: #aecbfa;
+  --primary-pressed: #c7dbfd;
+  --primary-soft: #1f3f66;
+  --primary-on: #202124;
+  --primary-focus: rgba(138, 180, 248, 0.3);
+
+  --success: #81c995;
+  --success-bg: #1e3a2a;
+  --warning: #fdd663;
+  --warning-bg: #4d3f12;
+  --error: #f28b82;
+  --error-bg: #4a1d1a;
+
+  --scrim: rgba(0, 0, 0, 0.6);
+  --shadow-1: 0 1px 2px 0 rgba(0, 0, 0, 0.4), 0 1px 3px 1px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 2px 6px 2px rgba(0, 0, 0, 0.45), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+
+  --gold: #fdd663;
+  --disabled: #3c4043;
+  --disabled-text: #80868b;
+
+  --debug-bg: rgba(248, 249, 250, 0.94);
+  --debug-text: #202124;
+  --debug-border: rgba(0, 0, 0, 0.12);
+  --debug-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
 body {
   margin: 0;
   padding: 0;
-  color: #202124;
-  background-color: #ffffff;
+  color: var(--text);
+  background-color: var(--bg);
   font-family:
     "Google Sans",
     "Roboto",

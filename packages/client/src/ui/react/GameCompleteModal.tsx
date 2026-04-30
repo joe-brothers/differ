@@ -367,7 +367,7 @@ export function GameCompleteModal() {
               fontSize: 13,
               color: CSS.primary,
               backgroundColor: CSS.primarySoft,
-              border: `1px solid ${CSS.primary}33`,
+              border: `1px solid var(--primary-focus)`,
               textAlign: "center",
             }}
           >

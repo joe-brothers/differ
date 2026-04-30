@@ -12,17 +12,19 @@ const PANEL_WIDTH = 180;
 // the panel a few pixels.
 const DRAG_THRESHOLD = 4;
 
+// Panel inverts the app theme (light app → dark panel, dark app → light)
+// so it always stands out from the canvas. Tokens live in style.css.
 const panelStyle: CSSProperties = {
   position: "fixed",
   zIndex: 10000,
   fontFamily:
     '-apple-system, BlinkMacSystemFont, "SF Mono", Menlo, Consolas, "Courier New", monospace',
   fontSize: 12,
-  color: "#e5e7eb",
-  background: "rgba(17, 24, 39, 0.92)",
-  border: "1px solid rgba(255, 255, 255, 0.1)",
+  color: "var(--debug-text)",
+  background: "var(--debug-bg)",
+  border: "1px solid var(--debug-border)",
   borderRadius: 6,
-  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
+  boxShadow: "var(--debug-shadow)",
   width: PANEL_WIDTH,
   userSelect: "none",
   // #react-root sets pointer-events: none so canvas clicks pass through;
@@ -36,7 +38,7 @@ const headerStyle: CSSProperties = {
   alignItems: "center",
   padding: "6px 10px",
   cursor: "grab",
-  borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+  borderBottom: "1px solid var(--debug-border)",
   fontWeight: 600,
   letterSpacing: 0.5,
 };

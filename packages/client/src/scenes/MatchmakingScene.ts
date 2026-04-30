@@ -71,7 +71,7 @@ export class MatchmakingScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "1v1 Match";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 12px 0",
       fontSize: "20px",
       fontWeight: "500",
@@ -124,7 +124,7 @@ export class MatchmakingScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Finding a match";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 8px 0",
       fontSize: "20px",
       fontWeight: "500",
@@ -135,7 +135,7 @@ export class MatchmakingScene extends Container implements IScene {
     const elapsedEl = document.createElement("p");
     elapsedEl.textContent = "Searching for an opponent... 0s";
     Object.assign(elapsedEl.style, {
-      color: "#5F6368",
+      color: "var(--text-secondary)",
       fontSize: "14px",
       textAlign: "center",
       margin: "0 0 12px 0",
@@ -175,7 +175,7 @@ export class MatchmakingScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Match search failed";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 8px 0",
       fontSize: "20px",
       fontWeight: "500",
@@ -186,7 +186,7 @@ export class MatchmakingScene extends Container implements IScene {
     const msg = document.createElement("p");
     msg.textContent = message;
     Object.assign(msg.style, {
-      color: "#D93025",
+      color: "var(--error)",
       fontSize: "13px",
       textAlign: "center",
       margin: "0 0 12px 0",
@@ -230,7 +230,7 @@ export class MatchmakingScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Waiting for opponent";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 8px 0",
       fontSize: "20px",
       fontWeight: "500",
@@ -249,15 +249,15 @@ export class MatchmakingScene extends Container implements IScene {
 
     const codeEl = document.createElement("div");
     Object.assign(codeEl.style, {
-      color: "#202124",
+      color: "var(--text)",
       fontSize: "36px",
       fontFamily: '"Roboto Mono", "JetBrains Mono", ui-monospace, monospace',
       fontWeight: "500",
       letterSpacing: "4px",
       textAlign: "center",
       padding: "16px 48px",
-      background: "#F1F3F4",
-      border: "1px solid #DADCE0",
+      background: "var(--surface-sunken)",
+      border: "1px solid var(--border)",
       borderRadius: "4px",
       userSelect: "all",
     });
@@ -270,7 +270,7 @@ export class MatchmakingScene extends Container implements IScene {
     const hint = document.createElement("p");
     hint.textContent = "Share this code with a friend. Game starts automatically.";
     Object.assign(hint.style, {
-      color: "#5F6368",
+      color: "var(--text-secondary)",
       fontSize: "13px",
       textAlign: "center",
       margin: "4px 0",
@@ -280,7 +280,7 @@ export class MatchmakingScene extends Container implements IScene {
     // Slot for opponent info, populated when player_joined arrives.
     this.opponentEl = document.createElement("div");
     Object.assign(this.opponentEl.style, {
-      color: "#202124",
+      color: "var(--text)",
       fontSize: "14px",
       textAlign: "center",
       margin: "8px 0 0 0",
@@ -315,9 +315,9 @@ export class MatchmakingScene extends Container implements IScene {
       padding: "4px 10px",
       height: "28px",
       borderRadius: "4px",
-      border: "1px solid #DADCE0",
-      background: "#FFFFFF",
-      color: "#5F6368",
+      border: "1px solid var(--border)",
+      background: "var(--surface)",
+      color: "var(--text-secondary)",
       fontSize: "12px",
       fontWeight: "500",
       cursor: "pointer",
@@ -325,12 +325,12 @@ export class MatchmakingScene extends Container implements IScene {
     });
     btn.textContent = "Copy";
     btn.addEventListener("mouseenter", () => {
-      btn.style.background = "#F1F3F4";
-      btn.style.color = "#202124";
+      btn.style.background = "var(--surface-sunken)";
+      btn.style.color = "var(--text)";
     });
     btn.addEventListener("mouseleave", () => {
-      btn.style.background = "#FFFFFF";
-      btn.style.color = "#5F6368";
+      btn.style.background = "var(--surface)";
+      btn.style.color = "var(--text-secondary)";
     });
     btn.addEventListener("click", async () => {
       const text = getText();
@@ -356,10 +356,10 @@ export class MatchmakingScene extends Container implements IScene {
       }
       const original = btn.textContent;
       btn.textContent = "Copied!";
-      btn.style.color = "#1A73E8";
+      btn.style.color = "var(--primary)";
       window.setTimeout(() => {
         btn.textContent = original;
-        btn.style.color = "#5F6368";
+        btn.style.color = "var(--text-secondary)";
       }, 1200);
     });
     return btn;
@@ -373,7 +373,7 @@ export class MatchmakingScene extends Container implements IScene {
     label.textContent = `Opponent: ${name} `;
     const winsBadge = document.createElement("span");
     winsBadge.textContent = `· ${wins} win${wins === 1 ? "" : "s"}`;
-    Object.assign(winsBadge.style, { color: "#5F6368" });
+    Object.assign(winsBadge.style, { color: "var(--text-secondary)" });
     this.opponentEl.appendChild(label);
     this.opponentEl.appendChild(winsBadge);
     // Once we have an opponent the wait is over; drop the spinner so the
@@ -391,7 +391,7 @@ export class MatchmakingScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Enter Room Code";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 8px 0",
       fontSize: "20px",
       fontWeight: "500",
@@ -448,7 +448,7 @@ export class MatchmakingScene extends Container implements IScene {
     const heading = document.createElement("h2");
     heading.textContent = "Joined";
     Object.assign(heading.style, {
-      color: "#202124",
+      color: "var(--text)",
       margin: "0 0 8px 0",
       fontSize: "20px",
       fontWeight: "500",
@@ -461,15 +461,15 @@ export class MatchmakingScene extends Container implements IScene {
       Object.assign(codeWrap.style, { position: "relative", margin: "0 0 8px 0" });
       const codeEl = document.createElement("div");
       Object.assign(codeEl.style, {
-        color: "#202124",
+        color: "var(--text)",
         fontSize: "20px",
         fontFamily: '"Roboto Mono", "JetBrains Mono", ui-monospace, monospace',
         fontWeight: "500",
         letterSpacing: "4px",
         textAlign: "center",
         padding: "10px 48px",
-        background: "#F1F3F4",
-        border: "1px solid #DADCE0",
+        background: "var(--surface-sunken)",
+        border: "1px solid var(--border)",
         borderRadius: "4px",
         userSelect: "all",
       });
@@ -482,7 +482,7 @@ export class MatchmakingScene extends Container implements IScene {
     const info = document.createElement("p");
     info.textContent = "Starting soon...";
     Object.assign(info.style, {
-      color: "#5F6368",
+      color: "var(--text-secondary)",
       fontSize: "14px",
       textAlign: "center",
       margin: "0 0 12px 0",
@@ -491,7 +491,7 @@ export class MatchmakingScene extends Container implements IScene {
 
     this.opponentEl = document.createElement("div");
     Object.assign(this.opponentEl.style, {
-      color: "#202124",
+      color: "var(--text)",
       fontSize: "14px",
       textAlign: "center",
       margin: "0 0 12px 0",

@@ -9,6 +9,24 @@
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/style.css" />
+    <script>
+      // Set data-theme before first paint to avoid a light-on-dark flash.
+      // ThemeManager replays this on init and is the source of truth afterwards.
+      (function () {
+        try {
+          var v = localStorage.getItem("differ_theme");
+          var mode =
+            v === "light" || v === "dark"
+              ? v
+              : window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          document.documentElement.setAttribute("data-theme", mode);
+        } catch (e) {
+          /* localStorage blocked; ThemeManager handles fallback */
+        }
+      })();
+    </script>
     <title>Differ: Spot-the-difference Game</title>
     <meta
       name="description"
