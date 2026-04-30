@@ -155,8 +155,22 @@ export class GameScene extends Container implements IScene {
     const screenWidth = this.app.screen.width;
     const screenHeight = this.app.screen.height;
 
-    const availableWidth = screenWidth - IMAGE_GAP - UI_PADDING * 2;
-    const availableHeight = screenHeight - UI_PADDING * 2 - 80;
+    // Vertical layout band. Above the images: padding + timer chip + gap +
+    // floating StageTracker (header + pills + IMAGE_HUG_GAP=36). Below the
+    // images: padding + floating Hint button + IMAGE_HUG_GAP=36. The
+    // middle-row arrow buttons float at the canvas center and don't claim
+    // layout space. Constants are kept conservative so the floating React
+    // pieces never overlap the panels.
+    const TOP_RESERVE = UI_PADDING + 36 + 16 + 108; // ≈180
+    const BOTTOM_RESERVE = UI_PADDING + 76; // ≈96 (Hint reserve regardless of mode for stable image position)
+
+    // Horizontal layout band: subtract room for the floating prev/next
+    // arrows that flank the image pair. ARROW_BUTTON (48) + ARROW_GAP (48)
+    // each side, mirrored from src/ui/react/GameHud.tsx so the arrows
+    // always fit even on narrow viewports.
+    const ARROW_RESERVE = (48 + 48) * 2;
+    const availableWidth = screenWidth - IMAGE_GAP - UI_PADDING * 2 - ARROW_RESERVE;
+    const availableHeight = screenHeight - TOP_RESERVE - BOTTOM_RESERVE;
     const maxImageWidth = availableWidth / 2;
 
     const scaleX = maxImageWidth / IMAGE_WIDTH;
@@ -168,9 +182,22 @@ export class GameScene extends Container implements IScene {
 
     const totalWidth = scaledWidth * 2 + IMAGE_GAP;
     const startX = (screenWidth - totalWidth) / 2;
-    const startY = (screenHeight - scaledHeight) / 2 + 20;
+    // Center the image within the available band — NOT the whole viewport —
+    // so the floating tracker / hint above and below stay clear.
+    const startY = TOP_RESERVE + Math.max(0, (availableHeight - scaledHeight) / 2);
 
     this.gameArea.position.set(startX, startY);
+
+    // Tell the React HUD where the rendered image pair lives so it can hug
+    // the panels: the StageTracker sits just above `top`, the Hint sits just
+    // below `bottom`, and the prev/next arrows in MiddleRow hug the left/right
+    // edges based on `width`. Republished on every layout pass so resize
+    // (and image-scale recalculation) keeps the HUD anchored.
+    useUIStore.getState().setImagePairBounds({
+      width: totalWidth,
+      top: startY,
+      bottom: startY + scaledHeight,
+    });
   }
 
   private createPlaceholders(): void {
@@ -201,16 +228,16 @@ export class GameScene extends Container implements IScene {
       this.uiLayer.addChild(this.menuIcon);
     }
 
-    this.navButtons.position.set(
-      this.app.screen.width / 2 - 55,
-      this.app.screen.height - UI_PADDING - 50,
-    );
+    // NavButtons used to live as a Pixi widget at the bottom-center; the
+    // React StageTracker now owns prev/next + per-pair jumps and exposes the
+    // 5-dots-per-pair structure that Pixi text couldn't communicate. Keep
+    // the instance around so existing setForceDisabled hooks remain valid,
+    // but never add it to the scene graph.
     this.navButtons.setCallbacks(
       () => gameState.prevImage(),
       () => gameState.nextImage(),
     );
     this.navButtons.updateState(0, IMAGES_PER_GAME);
-    this.uiLayer.addChild(this.navButtons);
     // HUD state (foundCount, currentImageIndex, opponentFoundCount, gameType)
     // was hydrated from gameState by ui.mountHud() in init() and stays in
     // sync via the store<->gameState bridge. Nothing to wire here.
@@ -750,7 +777,6 @@ export class GameScene extends Container implements IScene {
   resize(width: number, height: number): void {
     this.setupLayout();
     this.menuIcon.position.set(width - UI_PADDING - 44, UI_PADDING);
-    this.navButtons.position.set(width / 2 - 55, height - UI_PADDING - 50);
     this.countdownOverlay.resize(width, height);
 
     if (this.placeholderContainer.children.length > 0) {

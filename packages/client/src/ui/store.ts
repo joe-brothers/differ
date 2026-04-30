@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { GameType } from "../types";
 import { gameState } from "../managers/GameStateManager";
+import { IMAGES_PER_GAME } from "../constants";
 
 // Shape of the modal currently shown over the game scene. The whole overlay
 // layer is driven from this single discriminated union so only one modal can
@@ -37,6 +38,11 @@ interface UIStore {
   // HUD — visible only while GameScene is mounted.
   hudVisible: boolean;
   foundCount: number;
+  // Per-image found counts (length === IMAGES_PER_GAME). Drives the bottom
+  // stage tracker so each pair pill can show how many of its 5 diffs are
+  // cleared at a glance — the original "X/25" headline made it hard to tell
+  // that diffs are split 5-per-pair.
+  foundPerImage: number[];
   currentImageIndex: number;
   opponentFoundCount: number;
   opponentOnline: boolean;
@@ -80,6 +86,17 @@ interface UIStore {
   // Per-frame timer tick (driven by Pixi ticker in GameScene.update).
   setTimerSec: (sec: number) => void;
 
+  // Bounds in CSS pixels of the rendered image pair (left + gap + right).
+  // Republished by GameScene whenever setupLayout runs (initial mount and on
+  // resize) so the React HUD pieces can hug the images: the StageTracker
+  // sits just above `imagePairTop`, the Hint sits just below `imagePairBottom`,
+  // the prev/next arrows hug the left/right at the pair's vertical center.
+  // 0 means "not laid out yet" — components fall back to a sensible default.
+  imagePairWidth: number;
+  imagePairTop: number;
+  imagePairBottom: number;
+  setImagePairBounds: (bounds: { width: number; top: number; bottom: number }) => void;
+
   // Opponent presence (socket events).
   setOpponentOnline: (online: boolean) => void;
 
@@ -113,6 +130,7 @@ interface UIStore {
 export const useUIStore = create<UIStore>((set) => ({
   hudVisible: false,
   foundCount: 0,
+  foundPerImage: Array.from({ length: IMAGES_PER_GAME }, () => 0),
   currentImageIndex: 0,
   opponentFoundCount: 0,
   opponentOnline: true,
@@ -123,6 +141,9 @@ export const useUIStore = create<UIStore>((set) => ({
   hintsUsed: 0,
   hintCooldownUntilMs: 0,
   hintActive: false,
+  imagePairWidth: 0,
+  imagePairTop: 0,
+  imagePairBottom: 0,
   modal: { type: "none" },
   rematchPending: false,
   opponentRematch: false,
@@ -130,9 +151,17 @@ export const useUIStore = create<UIStore>((set) => ({
 
   mountHud: () => {
     const s = gameState.getState();
+    // Initial per-image counts come from gameState — covers the reconnect
+    // path where the player rejoins mid-game and the server shipped the
+    // current foundCount totals.
+    const foundPerImage = Array.from({ length: IMAGES_PER_GAME }, () => 0);
+    for (let i = 0; i < IMAGES_PER_GAME; i++) {
+      foundPerImage[i] = gameState.getFoundCountForImage(i);
+    }
     set({
       hudVisible: true,
       foundCount: s.foundCount,
+      foundPerImage,
       currentImageIndex: s.currentImageIndex,
       opponentFoundCount: s.opponentFoundCount,
       opponentOnline: true,
@@ -164,6 +193,8 @@ export const useUIStore = create<UIStore>((set) => ({
 
   setTimerSec: (sec) => set({ timerSec: sec }),
   setOpponentOnline: (online) => set({ opponentOnline: online }),
+  setImagePairBounds: ({ width, top, bottom }) =>
+    set({ imagePairWidth: width, imagePairTop: top, imagePairBottom: bottom }),
 
   openPause: () => set({ modal: { type: "pause" } }),
   closePause: () => set((s) => (s.modal.type === "pause" ? { modal: { type: "none" } } : {})),
@@ -209,8 +240,14 @@ export const useUIStore = create<UIStore>((set) => ({
 // gameState remains the source of truth for game mechanics; this layer just
 // projects the subset the DOM cares about so React can re-render declaratively.
 
-gameState.on("differenceFound", (payload: { total: number }) => {
-  useUIStore.setState({ foundCount: payload.total });
+gameState.on("differenceFound", (payload: { total: number; imageIndex: number }) => {
+  // Bump the per-image counter for the pair the diff belongs to. We mirror
+  // gameState rather than recompute from selectedDifferences so React only
+  // re-renders the pill that actually changed.
+  const prev = useUIStore.getState().foundPerImage;
+  const next = prev.slice();
+  next[payload.imageIndex] = (next[payload.imageIndex] ?? 0) + 1;
+  useUIStore.setState({ foundCount: payload.total, foundPerImage: next });
 });
 gameState.on("imageChanged", (idx: number) => {
   useUIStore.setState({ currentImageIndex: idx });
