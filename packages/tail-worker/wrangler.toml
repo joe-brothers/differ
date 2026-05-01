@@ -24,6 +24,10 @@ enabled = true
 
 [env.production]
 name = "differ-tail"
+# Tail-only worker: no fetch handler, never invoked over HTTP. Disabling the
+# workers.dev subdomain closes the auto-created public URL. On wrangler ≥4.44
+# preview_urls defaults to match workers_dev, so this also disables previews.
+workers_dev = false
 
 [env.production.placement]
 region = "aws:ap-northeast-2"
