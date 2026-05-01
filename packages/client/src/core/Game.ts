@@ -6,7 +6,7 @@ import { authState } from "../managers/AuthStateManager";
 import { MainMenuScene } from "../scenes/MainMenuScene";
 import { GameScene } from "../scenes/GameScene";
 import { LoadingScene } from "../scenes/LoadingScene";
-import { AuthScene } from "../scenes/AuthScene";
+import { AuthScene, type AuthSceneInitial } from "../scenes/AuthScene";
 import { LeaderboardScene } from "../scenes/LeaderboardScene";
 import { HistoryScene } from "../scenes/HistoryScene";
 import { MatchmakingScene } from "../scenes/MatchmakingScene";
@@ -45,6 +45,21 @@ function clearActiveRoom(): void {
     localStorage.removeItem(ACTIVE_ROOM_KEY);
   } catch {
     /* ignore */
+  }
+}
+
+// Parses email-link query params: emails contain `?action=verify-email&token=…`
+// or `?action=reset-password&token=…`. Returns null if the URL has neither.
+function readEmailAction(): AuthSceneInitial | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    const token = params.get("token") ?? undefined;
+    if (action === "verify-email" && token) return { view: "verify", token };
+    if (action === "reset-password" && token) return { view: "reset", token };
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -91,6 +106,18 @@ export class Game {
   }
 
   async start(): Promise<void> {
+    // Email-link actions (?action=verify-email|reset-password&token=...) take
+    // priority over both restore and any in-progress game — the user clearly
+    // wants to act on the link in their inbox first.
+    const action = readEmailAction();
+    if (action) {
+      // Try a silent restore so the verify flow knows whether to bounce to
+      // the menu or sign-in afterwards. Reset flow always lands on sign-in.
+      await authState.tryRestore();
+      await this.showAuthScene(action);
+      return;
+    }
+
     const restored = await authState.tryRestore();
     if (!restored) {
       await this.showAuthScene();
@@ -117,8 +144,11 @@ export class Game {
     }
   }
 
-  async showAuthScene(): Promise<void> {
-    await this.sceneManager.switchTo(AuthScene);
+  async showAuthScene(initial?: AuthSceneInitial): Promise<void> {
+    await this.sceneManager.switchTo(
+      AuthScene,
+      initial ? (app) => new AuthScene(app, initial) : undefined,
+    );
   }
 
   async showMainMenu(): Promise<void> {

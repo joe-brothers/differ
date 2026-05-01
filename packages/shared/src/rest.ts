@@ -143,17 +143,42 @@ export const TotpDisableReq = z.object({
 });
 export type TotpDisableReq = z.infer<typeof TotpDisableReq>;
 
-// Mockup-only password reset request (no email is actually sent yet).
+// Forgot-password kicks off the reset flow. Server responds 200 regardless
+// of whether the account exists / has a verified email so we don't leak
+// account presence; the actual email is dispatched only when both are true.
+// Email is the only accepted lookup key — username lookup would let an
+// attacker brute-force the username space to discover which accounts exist.
 export const ForgotPasswordReq = z.object({
-  username: z.string().optional(),
-  email: z.string().email().optional(),
+  email: z.string().email(),
 });
 export type ForgotPasswordReq = z.infer<typeof ForgotPasswordReq>;
+
+// Submitted by the reset form rendered when the user follows the link from
+// the password-reset email. Token is the raw value from the URL.
+export const ResetPasswordReq = z.object({
+  token: z.string().min(8),
+  password: PasswordSchema,
+});
+export type ResetPasswordReq = z.infer<typeof ResetPasswordReq>;
+
+export const VerifyEmailReq = z.object({
+  token: z.string().min(8),
+});
+export type VerifyEmailReq = z.infer<typeof VerifyEmailReq>;
 
 export const SetEmailReq = z.object({
   email: z.string().email(),
 });
 export type SetEmailReq = z.infer<typeof SetEmailReq>;
+
+export const EmailStatusRes = z.object({
+  email: z.string().nullable(),
+  verified: z.boolean(),
+  // Server-side cooldown remaining in seconds (0 when ready to resend).
+  // Client uses this to render a disabled "Resend" button with a countdown.
+  resendCooldownSec: z.number().int().nonnegative(),
+});
+export type EmailStatusRes = z.infer<typeof EmailStatusRes>;
 
 export const CreateRoomReq = z.object({
   mode: GameMode,

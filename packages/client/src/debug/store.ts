@@ -28,6 +28,20 @@ interface PanelChrome {
 export interface DebugState extends DebugToggles, PanelChrome {}
 
 const PANEL_DEFAULT_WIDTH = 180;
+// Header is ~28px tall; leave at least that much visible so the panel can
+// always be grabbed back even if the user shrinks the window after parking it.
+const PANEL_MIN_VISIBLE = 28;
+
+function clampPosition(x: number, y: number): { x: number; y: number } {
+  if (typeof window === "undefined") return { x, y };
+  const maxX = Math.max(0, window.innerWidth - PANEL_MIN_VISIBLE);
+  const maxY = Math.max(0, window.innerHeight - PANEL_MIN_VISIBLE);
+  return {
+    x: Math.min(Math.max(x, 0), maxX),
+    y: Math.min(Math.max(y, 0), maxY),
+  };
+}
+
 const DEFAULTS: DebugState = {
   showDiffs: false,
   collapsed: false,
@@ -50,7 +64,12 @@ function load(): DebugState {
     if (!raw) return DEFAULTS;
     const parsed = JSON.parse(raw) as Partial<DebugState>;
     // Spread defaults first so flags added later don't crash older saved state.
-    return { ...DEFAULTS, ...parsed };
+    const merged = { ...DEFAULTS, ...parsed };
+    // Clamp persisted position to the current viewport. Saved positions can
+    // drift offscreen if the window shrinks (or moves to a smaller monitor)
+    // between sessions, leaving the panel invisible until a fresh resize.
+    const { x, y } = clampPosition(merged.x, merged.y);
+    return { ...merged, x, y };
   } catch {
     return DEFAULTS;
   }
@@ -81,6 +100,23 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
     save(next);
     set({ [key]: next[key] } as Partial<DebugStore>);
   },
-  movePanel: (x, y) => set({ x, y }),
+  movePanel: (x, y) => {
+    const c = clampPosition(x, y);
+    set({ x: c.x, y: c.y });
+  },
   persist: () => save(get()),
 }));
+
+// Re-clamp to the new viewport on resize so the panel doesn't disappear when
+// the window shrinks below the saved x/y. Live drag updates already clamp
+// via movePanel; this covers the "user resized while idle" case.
+if (typeof window !== "undefined" && import.meta.env.DEV) {
+  window.addEventListener("resize", () => {
+    const s = useDebugStore.getState();
+    const c = clampPosition(s.x, s.y);
+    if (c.x !== s.x || c.y !== s.y) {
+      useDebugStore.setState({ x: c.x, y: c.y });
+      save({ ...s, x: c.x, y: c.y });
+    }
+  });
+}

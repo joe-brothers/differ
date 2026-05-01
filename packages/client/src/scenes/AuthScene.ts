@@ -9,7 +9,15 @@ import { ApiError, authApi } from "../network/rest";
 import { game } from "../core/Game";
 import { evaluatePassword, PASSWORD_HINT } from "../managers/passwordStrength";
 
-type AuthView = "chooser" | "signin" | "signup" | "totp" | "forgot";
+type AuthView = "chooser" | "signin" | "signup" | "totp" | "forgot" | "reset" | "verify";
+
+// Pending email-action handed in by Game.start when the SPA loads with
+// `?action=reset-password&token=...` or `?action=verify-email&token=...`.
+// AuthScene routes straight to the matching view instead of the chooser.
+export interface AuthSceneInitial {
+  view: AuthView;
+  token?: string;
+}
 
 export class AuthScene extends Container implements IScene {
   private app: Application;
@@ -20,10 +28,15 @@ export class AuthScene extends Container implements IScene {
   private footerText: Text | null = null;
   private view: AuthView = "chooser";
   private totpTicket: string | null = null;
+  private resetToken: string | null = null;
+  private verifyToken: string | null = null;
 
-  constructor(app: Application) {
+  constructor(app: Application, initial?: AuthSceneInitial) {
     super();
     this.app = app;
+    if (initial?.view) this.view = initial.view;
+    if (initial?.view === "reset" && initial.token) this.resetToken = initial.token;
+    if (initial?.view === "verify" && initial.token) this.verifyToken = initial.token;
   }
 
   async init(): Promise<void> {
@@ -97,6 +110,8 @@ export class AuthScene extends Container implements IScene {
     if (this.view === "chooser") this.renderChooser();
     else if (this.view === "totp") this.renderTotpForm();
     else if (this.view === "forgot") this.renderForgotForm();
+    else if (this.view === "reset") this.renderResetForm();
+    else if (this.view === "verify") this.renderVerifyForm();
     else this.renderCredentialsForm();
   }
 
@@ -457,7 +472,7 @@ export class AuthScene extends Container implements IScene {
 
     const blurb = document.createElement("p");
     blurb.textContent =
-      "Enter your username or email. If a matching account exists, we'll send a reset link. (Email delivery is mocked for now.)";
+      "Enter the email on your account. If it matches a verified address, we'll send a reset link.";
     Object.assign(blurb.style, {
       color: "var(--text-secondary)",
       fontSize: "13px",
@@ -466,11 +481,11 @@ export class AuthScene extends Container implements IScene {
     });
     card.appendChild(blurb);
 
-    const idInput = this.overlay.createInput(card, {
-      type: "text",
-      placeholder: "Username or email",
-      name: "identifier",
-      autocomplete: "username",
+    const emailInput = this.overlay.createInput(card, {
+      type: "email",
+      placeholder: "you@example.com",
+      name: "email",
+      autocomplete: "email",
     });
 
     const status = this.overlay.createErrorText(card);
@@ -483,23 +498,26 @@ export class AuthScene extends Container implements IScene {
     });
 
     const submit = async () => {
-      const value = idInput.value.trim();
-      if (!value) {
+      const value = emailInput.value.trim();
+      // Same regex used elsewhere in the client. Server also re-validates;
+      // the gate here just stops obvious typos from burning a request.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
         status.style.color = "var(--error)";
-        status.textContent = "Enter a username or email.";
+        status.textContent = "Enter a valid email.";
         return;
       }
       submitBtn.disabled = true;
       const stopDots = this.overlay!.animateButtonDots(submitBtn, "Sending");
       try {
-        const isEmail = value.includes("@");
-        await authApi.forgotPassword(isEmail ? { email: value } : { username: value });
+        await authApi.forgotPassword(value);
         status.style.color = "var(--success)";
-        status.textContent = "If an account matches, you'll receive an email shortly.";
+        status.textContent = "If a verified account matches, you'll receive an email shortly.";
       } catch {
-        // Mocked endpoint always succeeds; treat any failure as transient.
+        // The endpoint is intentionally enumeration-resistant and returns 200
+        // for misses; any failure here is a transport hiccup, so we surface
+        // the same message rather than leaking detail.
         status.style.color = "var(--success)";
-        status.textContent = "If an account matches, you'll receive an email shortly.";
+        status.textContent = "If a verified account matches, you'll receive an email shortly.";
       } finally {
         stopDots();
         submitBtn.disabled = false;
@@ -507,10 +525,230 @@ export class AuthScene extends Container implements IScene {
       }
     };
     submitBtn.addEventListener("click", submit);
-    idInput.addEventListener("keydown", (e) => {
+    emailInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") submit();
     });
-    idInput.focus();
+    emailInput.focus();
+  }
+
+  // Rendered when the SPA loads with `?action=reset-password&token=...`.
+  // Token came in over email; we don't validate it client-side because the
+  // server's reset endpoint is the authority. Submit posts the new password
+  // alongside the token and bounces back to sign-in on success.
+  private renderResetForm(): void {
+    const card = this.resetOverlay();
+    if (!card || !this.overlay) return;
+    const overlay = this.overlay;
+
+    const heading = document.createElement("h2");
+    heading.textContent = "Set New Password";
+    Object.assign(heading.style, {
+      color: "var(--text)",
+      margin: "0 0 8px 0",
+      fontSize: "22px",
+      fontWeight: "500",
+      textAlign: "center",
+    });
+    card.appendChild(heading);
+
+    if (!this.resetToken) {
+      const blurb = document.createElement("p");
+      blurb.textContent = "Reset link is missing or invalid. Request a new one.";
+      Object.assign(blurb.style, {
+        color: "var(--error)",
+        fontSize: "13px",
+        textAlign: "center",
+        margin: "0 0 12px 0",
+      });
+      card.appendChild(blurb);
+      const back = overlay.createSecondaryButton(card, "Back to Sign In");
+      back.addEventListener("click", () => {
+        clearActionFromUrl();
+        this.view = "signin";
+        this.render();
+      });
+      return;
+    }
+
+    const blurb = document.createElement("p");
+    blurb.textContent = "Enter a new password for your account.";
+    Object.assign(blurb.style, {
+      color: "var(--text-secondary)",
+      fontSize: "13px",
+      textAlign: "center",
+      margin: "0 0 12px 0",
+    });
+    card.appendChild(blurb);
+
+    const passwordInput = overlay.createInputWithHint(
+      card,
+      {
+        type: "password",
+        placeholder: "New password",
+        name: "password",
+        autocomplete: "new-password",
+      },
+      { title: PASSWORD_HINT.title, items: [...PASSWORD_HINT.items] },
+    );
+    overlay.addPasswordToggle(passwordInput);
+    const strengthMeter = overlay.createStrengthMeter(card);
+
+    const confirmInput = overlay.createInput(card, {
+      type: "password",
+      placeholder: "Confirm new password",
+      name: "confirm",
+      autocomplete: "new-password",
+    });
+    overlay.addPasswordToggle(confirmInput);
+
+    const errorText = overlay.createErrorText(card);
+    const submitBtn = overlay.createButton(card, "Reset Password");
+    const cancelBtn = overlay.createSecondaryButton(card, "Cancel");
+
+    cancelBtn.addEventListener("click", () => {
+      this.resetToken = null;
+      clearActionFromUrl();
+      this.view = "signin";
+      this.render();
+    });
+
+    const isValid = (): boolean => {
+      const p = passwordInput.value;
+      if (p.length < 8 || p.length > 128) return false;
+      if (!/[A-Za-z]/.test(p) || !/[0-9]/.test(p)) return false;
+      return p === confirmInput.value;
+    };
+    overlay.setButtonEnabled(submitBtn, false);
+    const refresh = () => {
+      const r = evaluatePassword(passwordInput.value);
+      const detail = r.warning || r.suggestion;
+      strengthMeter.update(r.score, detail ? `${r.label} — ${detail}` : r.label);
+      overlay.setButtonEnabled(submitBtn, isValid());
+    };
+    passwordInput.addEventListener("input", refresh);
+    confirmInput.addEventListener("input", refresh);
+
+    const submit = async () => {
+      if (!isValid()) {
+        errorText.textContent = "Passwords don't match or are too weak.";
+        return;
+      }
+      const token = this.resetToken;
+      if (!token) return;
+      overlay.setButtonEnabled(submitBtn, false);
+      const stopDots = overlay.animateButtonDots(submitBtn, "Saving");
+      errorText.textContent = "";
+      try {
+        await authApi.resetPassword(token, passwordInput.value);
+        stopDots();
+        this.resetToken = null;
+        clearActionFromUrl();
+        // Force-clear any stale session so the user signs in with the new
+        // password. The cookie may still be valid for the same account, but
+        // we want the post-reset experience to be deterministic.
+        try {
+          await authState.logout();
+        } catch {
+          /* ignore */
+        }
+        errorText.style.color = "var(--success)";
+        errorText.textContent = "Password updated. Redirecting to sign in…";
+        window.setTimeout(() => {
+          this.view = "signin";
+          this.render();
+        }, 800);
+      } catch (err) {
+        stopDots();
+        if (err instanceof ApiError && err.code === "invalid_token") {
+          errorText.textContent = "Reset link expired or already used. Request a new one.";
+        } else if (err instanceof ApiError && err.code === "rate_limited") {
+          errorText.textContent = "Too many attempts. Try again in a minute.";
+        } else if (err instanceof ApiError) {
+          errorText.textContent = err.message || "Could not reset password.";
+        } else {
+          errorText.textContent = "Network error. Try again.";
+        }
+        overlay.setButtonEnabled(submitBtn, true);
+        submitBtn.textContent = "Reset Password";
+      }
+    };
+    submitBtn.addEventListener("click", submit);
+    passwordInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submit();
+    });
+    confirmInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submit();
+    });
+    passwordInput.focus();
+  }
+
+  // Rendered when the SPA loads with `?action=verify-email&token=...`.
+  // Hits the verify endpoint immediately on mount so the user just sees the
+  // outcome — no extra click required.
+  private renderVerifyForm(): void {
+    const card = this.resetOverlay();
+    if (!card || !this.overlay) return;
+    const overlay = this.overlay;
+
+    const heading = document.createElement("h2");
+    heading.textContent = "Verify Email";
+    Object.assign(heading.style, {
+      color: "var(--text)",
+      margin: "0 0 8px 0",
+      fontSize: "22px",
+      fontWeight: "500",
+      textAlign: "center",
+    });
+    card.appendChild(heading);
+
+    const status = document.createElement("p");
+    Object.assign(status.style, {
+      color: "var(--text-secondary)",
+      fontSize: "14px",
+      textAlign: "center",
+      margin: "0 0 12px 0",
+    });
+    status.textContent = "Verifying…";
+    card.appendChild(status);
+
+    const continueBtn = overlay.createButton(card, "Continue");
+    continueBtn.style.display = "none";
+
+    const finish = () => {
+      this.verifyToken = null;
+      clearActionFromUrl();
+      if (authState.isAuthenticated()) {
+        game.showMainMenu();
+      } else {
+        this.view = "signin";
+        this.render();
+      }
+    };
+    continueBtn.addEventListener("click", finish);
+
+    const token = this.verifyToken;
+    if (!token) {
+      status.style.color = "var(--error)";
+      status.textContent = "Verification link is missing.";
+      continueBtn.style.display = "";
+      return;
+    }
+    void (async () => {
+      try {
+        await authApi.verifyEmail(token);
+        status.style.color = "var(--success)";
+        status.textContent = "Email verified. You're all set.";
+      } catch (err) {
+        status.style.color = "var(--error)";
+        if (err instanceof ApiError && err.code === "invalid_token") {
+          status.textContent = "Link expired or already used. Request a fresh one.";
+        } else {
+          status.textContent = "Could not verify. Try again later.";
+        }
+      } finally {
+        continueBtn.style.display = "";
+      }
+    })();
   }
 
   update(): void {
@@ -527,5 +765,18 @@ export class AuthScene extends Container implements IScene {
     this.overlay = null;
     this.removeAllListeners();
     super.destroy({ children: true });
+  }
+}
+
+// Strips ?action=...&token=... from the address bar after the flow finishes,
+// so a casual refresh doesn't keep re-triggering the same verify/reset view.
+function clearActionFromUrl(): void {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("action");
+    url.searchParams.delete("token");
+    window.history.replaceState(null, "", url.toString());
+  } catch {
+    /* ignore */
   }
 }

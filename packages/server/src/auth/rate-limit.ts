@@ -38,3 +38,10 @@ export function roomCreateKey(userId: string): string {
   // Key by userId so authenticated abuse can't sneak past via VPN-hopping.
   return `room:${userId}`;
 }
+
+// Email-sending routes are keyed by IP. We don't include the username/email
+// here because the limiter sits in front of the lookup — keying by an
+// attacker-controlled identifier would let them slice the bucket per target.
+export function emailIpKey(c: Context): string {
+  return `email:${clientIp(c)}`;
+}

@@ -9,6 +9,12 @@ export const users = sqliteTable(
     username: text("username").unique(),
     passwordHash: text("password_hash"),
     email: text("email").unique(),
+    // Set when the user clicks the verification link. Password-reset emails
+    // and any future "trusted-email" features only fire for non-null values.
+    emailVerifiedAt: text("email_verified_at"),
+    // Per-user cooldown for outbound mail (verification + reset). Paired with
+    // RL_EMAIL (per-IP) so neither vector alone burns through send budget.
+    lastEmailSentAt: text("last_email_sent_at"),
     isGuest: integer("is_guest").notNull().default(1),
     deviceId: text("device_id"),
     totpSecret: text("totp_secret"),
@@ -20,6 +26,32 @@ export const users = sqliteTable(
   (t) => ({
     usernameIdx: index("idx_users_username").on(t.username),
     deviceIdx: index("idx_users_device_id").on(t.deviceId),
+  }),
+);
+
+// Single-use tokens for email-bound flows. Stored as SHA-256 hex of the raw
+// token in the link, so a DB leak alone yields no usable links. Enumerated
+// by (user_id, purpose) to invalidate prior tokens when a fresh one is issued.
+export const emailTokens = sqliteTable(
+  "email_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    // Snapshot of the address at issue time. For verify, the row is rejected
+    // if the user has since changed their email out from under it.
+    email: text("email").notNull(),
+    purpose: text("purpose").notNull(), // 'verify' | 'reset'
+    expiresAt: text("expires_at").notNull(),
+    consumedAt: text("consumed_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => ({
+    userIdx: index("idx_email_tokens_user").on(t.userId, t.purpose),
+    expiresIdx: index("idx_email_tokens_expires").on(t.expiresAt),
   }),
 );
 

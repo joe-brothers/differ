@@ -3,6 +3,7 @@ import type {
   CreateRoomReq,
   CreateRoomRes,
   DailySummaryRes,
+  EmailStatusRes,
   LeaderboardRes,
   LoginReq,
   LoginTotpRequiredRes,
@@ -86,10 +87,10 @@ export const authApi = {
   logout(): Promise<{ ok: true }> {
     return request<{ ok: true }>("/auth/logout", { method: "POST" });
   },
-  forgotPassword(payload: { username?: string; email?: string }): Promise<{ ok: true }> {
+  forgotPassword(email: string): Promise<{ ok: true }> {
     return request<{ ok: true }>("/auth/forgot-password", {
       method: "POST",
-      body: payload,
+      body: { email },
     });
   },
   totpStatus(): Promise<TotpStatusRes> {
@@ -110,13 +111,28 @@ export const authApi = {
       body: { password },
     });
   },
-  getEmail(): Promise<{ email: string | null }> {
-    return request<{ email: string | null }>("/auth/email");
+  getEmail(): Promise<EmailStatusRes> {
+    return request<EmailStatusRes>("/auth/email");
   },
-  setEmail(email: string): Promise<{ ok: true; email: string; mocked: boolean }> {
-    return request<{ ok: true; email: string; mocked: boolean }>("/auth/email", {
+  setEmail(email: string): Promise<{ ok: true; email: string; verified: false }> {
+    return request<{ ok: true; email: string; verified: false }>("/auth/email", {
       method: "POST",
       body: { email },
+    });
+  },
+  resendVerification(): Promise<{ ok: true; verified?: boolean }> {
+    return request<{ ok: true; verified?: boolean }>("/auth/email/resend", { method: "POST" });
+  },
+  verifyEmail(token: string): Promise<{ ok: true; verified: true }> {
+    return request<{ ok: true; verified: true }>("/auth/email/verify", {
+      method: "POST",
+      body: { token },
+    });
+  },
+  resetPassword(token: string, password: string): Promise<{ ok: true }> {
+    return request<{ ok: true }>("/auth/reset-password", {
+      method: "POST",
+      body: { token, password },
     });
   },
 };

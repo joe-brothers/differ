@@ -9,6 +9,8 @@ import { leaderboardRoutes } from "./leaderboard/routes.js";
 import { matchmakingRoutes } from "./matchmaking/routes.js";
 import { buildDailySetForDate, utcDateKey } from "./daily/service.js";
 import { dailyRoutes } from "./daily/routes.js";
+import { getDb } from "./db/client.js";
+import { pruneEmailTokens } from "./auth/email.js";
 
 export { GameRoom } from "./rooms/game-room.js";
 export { MatchmakingQueue } from "./matchmaking/queue.js";
@@ -79,6 +81,9 @@ async function scheduled(_event: ScheduledController, env: Env, ctx: ExecutionCo
     Promise.allSettled([
       buildDailySetForDate(env, today),
       buildDailySetForDate(env, tomorrow),
+      // Sweep expired/consumed email tokens so the table doesn't grow
+      // forever. Best-effort — failure is logged but doesn't abort the cron.
+      pruneEmailTokens(getDb(env.DB)),
     ]).then((results) => {
       for (const r of results) if (r.status === "rejected") console.error(r.reason);
     }),

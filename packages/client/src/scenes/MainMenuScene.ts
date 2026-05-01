@@ -851,11 +851,15 @@ export class MainMenuScene extends Container implements IScene {
     card.appendChild(status);
 
     let totpEnabled = false;
-    let currentEmail: string | null = null;
+    let emailState: { email: string | null; verified: boolean; resendCooldownSec: number } = {
+      email: null,
+      verified: false,
+      resendCooldownSec: 0,
+    };
     try {
       const [t, e] = await Promise.all([authApi.totpStatus(), authApi.getEmail()]);
       totpEnabled = t.enabled;
-      currentEmail = e.email;
+      emailState = e;
       status.textContent = "";
     } catch {
       status.style.color = "var(--error)";
@@ -863,7 +867,7 @@ export class MainMenuScene extends Container implements IScene {
       return;
     }
 
-    this.renderSettingsBody(card, totpEnabled, currentEmail);
+    this.renderSettingsBody(card, totpEnabled, emailState);
 
     const closeBtn = this.settingsOverlay.createSecondaryButton(card, "Close");
     closeBtn.addEventListener("click", () => {
@@ -878,8 +882,9 @@ export class MainMenuScene extends Container implements IScene {
   private renderSettingsBody(
     card: HTMLDivElement,
     totpEnabled: boolean,
-    currentEmail: string | null,
+    emailState: { email: string | null; verified: boolean; resendCooldownSec: number },
   ): void {
+    const currentEmail = emailState.email;
     if (!this.settingsOverlay) return;
     const overlay = this.settingsOverlay;
 
@@ -944,7 +949,7 @@ export class MainMenuScene extends Container implements IScene {
         disableBtn.disabled = true;
         try {
           await authApi.totpDisable(pwdInput.value);
-          this.renderSettingsBody(card, false, currentEmail);
+          this.renderSettingsBody(card, false, emailState);
         } catch (err) {
           disableBtn.disabled = false;
           if (err instanceof ApiError && err.code === "invalid_credentials") {
@@ -956,12 +961,12 @@ export class MainMenuScene extends Container implements IScene {
       });
     } else {
       const enableBtn = overlay.createButton(dyn, "Enable 2FA");
-      enableBtn.addEventListener("click", () => this.startTotpEnrollment(card, currentEmail));
+      enableBtn.addEventListener("click", () => this.startTotpEnrollment(card, emailState));
     }
 
     // ---- Email section ----
     const emailHeader = document.createElement("h3");
-    emailHeader.textContent = "Recovery Email (mocked)";
+    emailHeader.textContent = "Recovery Email";
     Object.assign(emailHeader.style, {
       margin: "0",
       fontSize: "14px",
@@ -971,9 +976,14 @@ export class MainMenuScene extends Container implements IScene {
     dyn.appendChild(emailHeader);
 
     const emailBlurb = document.createElement("p");
-    emailBlurb.textContent = currentEmail
-      ? `Current: ${currentEmail}. (No email is actually sent yet.)`
-      : "Add an email so you can receive a password-reset link. (No email is actually sent yet.)";
+    if (currentEmail && emailState.verified) {
+      emailBlurb.innerHTML = `Verified: <strong>${escapeHtml(currentEmail)}</strong>. We'll only contact you about password resets.`;
+    } else if (currentEmail) {
+      emailBlurb.innerHTML = `Pending verification: <strong>${escapeHtml(currentEmail)}</strong>. Check your inbox for the confirmation link.`;
+    } else {
+      emailBlurb.textContent =
+        "Add an email so you can recover your account if you forget your password.";
+    }
     Object.assign(emailBlurb.style, {
       color: "var(--text-secondary)",
       fontSize: "13px",
@@ -989,9 +999,12 @@ export class MainMenuScene extends Container implements IScene {
     });
     if (currentEmail) emailInput.value = currentEmail;
     const emailErr = overlay.createErrorText(dyn);
-    const saveEmailBtn = overlay.createButton(dyn, "Save Email");
+    const saveEmailBtn = overlay.createButton(
+      dyn,
+      currentEmail && emailState.verified ? "Change Email" : "Save & Send Verification",
+    );
     saveEmailBtn.addEventListener("click", async () => {
-      const value = emailInput.value.trim();
+      const value = emailInput.value.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
         emailErr.style.color = "var(--error)";
         emailErr.textContent = "Enter a valid email.";
@@ -1001,12 +1014,18 @@ export class MainMenuScene extends Container implements IScene {
       try {
         await authApi.setEmail(value);
         emailErr.style.color = "var(--success)";
-        emailErr.textContent = "Saved. (Verification not implemented yet.)";
-        this.renderSettingsBody(card, totpEnabled, value);
+        emailErr.textContent = `Verification sent to ${value}.`;
+        this.renderSettingsBody(card, totpEnabled, {
+          email: value,
+          verified: false,
+          resendCooldownSec: 60,
+        });
       } catch (err) {
         emailErr.style.color = "var(--error)";
         if (err instanceof ApiError && err.code === "email_taken") {
           emailErr.textContent = "Email already in use.";
+        } else if (err instanceof ApiError && err.code === "rate_limited") {
+          emailErr.textContent = "Please wait a moment before trying again.";
         } else {
           emailErr.textContent = "Could not save email.";
         }
@@ -1014,12 +1033,68 @@ export class MainMenuScene extends Container implements IScene {
         saveEmailBtn.disabled = false;
       }
     });
+
+    // Resend button shows only when an email exists but isn't verified.
+    // Disabled while the per-user cooldown is active; we tick a local
+    // countdown so users see the wait without polling the server.
+    if (currentEmail && !emailState.verified) {
+      const resendBtn = overlay.createSecondaryButton(dyn, "Resend Verification");
+      let secondsLeft = emailState.resendCooldownSec;
+      const refreshLabel = () => {
+        if (secondsLeft > 0) {
+          resendBtn.disabled = true;
+          resendBtn.textContent = `Resend in ${secondsLeft}s`;
+        } else {
+          resendBtn.disabled = false;
+          resendBtn.textContent = "Resend Verification";
+        }
+      };
+      refreshLabel();
+      const tick = window.setInterval(() => {
+        if (secondsLeft <= 0) {
+          window.clearInterval(tick);
+          return;
+        }
+        secondsLeft -= 1;
+        refreshLabel();
+      }, 1000);
+      resendBtn.addEventListener("click", async () => {
+        resendBtn.disabled = true;
+        try {
+          const r = await authApi.resendVerification();
+          if (r.verified) {
+            emailErr.style.color = "var(--success)";
+            emailErr.textContent = "Already verified.";
+            this.renderSettingsBody(card, totpEnabled, {
+              email: currentEmail,
+              verified: true,
+              resendCooldownSec: 0,
+            });
+            return;
+          }
+          emailErr.style.color = "var(--success)";
+          emailErr.textContent = `Verification re-sent to ${currentEmail}.`;
+          secondsLeft = 60;
+          refreshLabel();
+        } catch (err) {
+          emailErr.style.color = "var(--error)";
+          if (err instanceof ApiError && err.code === "rate_limited") {
+            emailErr.textContent = "Please wait before resending.";
+            secondsLeft = Math.max(secondsLeft, 30);
+            refreshLabel();
+          } else {
+            emailErr.textContent = "Could not resend.";
+            resendBtn.disabled = false;
+          }
+        }
+      });
+    }
   }
 
   // Walks the user through TOTP enrollment: setup → show QR + secret → verify.
   private async startTotpEnrollment(
     card: HTMLDivElement,
-    currentEmail: string | null,
+    emailState: { email: string | null; verified: boolean; resendCooldownSec: number },
   ): Promise<void> {
     if (!this.settingsOverlay) return;
     const overlay = this.settingsOverlay;
@@ -1084,7 +1159,7 @@ export class MainMenuScene extends Container implements IScene {
     const cancelBtn = overlay.createSecondaryButton(dyn, "Cancel");
 
     cancelBtn.addEventListener("click", () => {
-      this.renderSettingsBody(card, false, currentEmail);
+      this.renderSettingsBody(card, false, emailState);
     });
 
     const submit = async () => {
@@ -1096,7 +1171,7 @@ export class MainMenuScene extends Container implements IScene {
       verifyBtn.disabled = true;
       try {
         await authApi.totpVerify(code);
-        this.renderSettingsBody(card, true, currentEmail);
+        this.renderSettingsBody(card, true, emailState);
       } catch (err) {
         verifyBtn.disabled = false;
         if (err instanceof ApiError && err.code === "invalid_totp") {
@@ -1179,4 +1254,13 @@ function formatMs(ms: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

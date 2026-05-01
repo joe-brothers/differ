@@ -12,6 +12,9 @@ JWT_ISSUER = "differ"
 CDN_BASE = "https://differ-assets.joe-brothers.com"
 ALLOWED_ORIGINS = ""
 TURNSTILE_SECRET = ""
+MAIL_FROM = "no-reply-local@differ.joe-brothers.com"
+MAIL_FROM_NAME = "Differ"
+APP_URL = "http://localhost:8080"
 
 # Declared secrets. wrangler validates these are set (via .dev.vars locally,
 # `wrangler secret put` remotely) before dev/deploy. Any value listed here must
@@ -67,6 +70,17 @@ type = "ratelimit"
 namespace_id = "1004"
 simple = { limit = 5, period = 60 }
 
+# Per-IP cap on outbound-mail-triggering routes (set/resend/forgot/reset).
+# Tighter than RL_LOGIN because each request can map to a real send-cost.
+[[unsafe.bindings]]
+name = "RL_EMAIL"
+type = "ratelimit"
+namespace_id = "1005"
+simple = { limit = 3, period = 60 }
+
+[[send_email]]
+name = "EMAIL"
+
 [observability]
 enabled = true
 
@@ -96,6 +110,9 @@ region = "aws:ap-northeast-2"
 JWT_ISSUER = "differ"
 CDN_BASE = "https://differ-assets.joe-brothers.com"
 ALLOWED_ORIGINS = "https://differ.joe-brothers.com"
+MAIL_FROM = "no-reply@differ.joe-brothers.com"
+MAIL_FROM_NAME = "Differ"
+APP_URL = "https://differ.joe-brothers.com"
 
 [env.production.secrets]
 required = ["JWT_SECRET", "TURNSTILE_SECRET"]
@@ -145,6 +162,15 @@ name = "RL_ROOM"
 type = "ratelimit"
 namespace_id = "2004"
 simple = { limit = 5, period = 60 }
+
+[[env.production.unsafe.bindings]]
+name = "RL_EMAIL"
+type = "ratelimit"
+namespace_id = "2005"
+simple = { limit = 3, period = 60 }
+
+[[env.production.send_email]]
+name = "EMAIL"
 
 [env.production.observability]
 enabled = true

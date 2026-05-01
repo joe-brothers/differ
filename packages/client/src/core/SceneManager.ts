@@ -15,15 +15,16 @@ export class SceneManager {
     this.app.stage.addChild(this.sceneContainer);
   }
 
-  async switchTo(SceneClass: SceneCtor): Promise<void> {
+  async switchTo(SceneClass: SceneCtor, factory?: (app: Application) => IScene): Promise<void> {
     // Destroy current scene
     if (this.currentScene) {
       this.currentScene.destroy();
       this.sceneContainer.removeChildren();
     }
 
-    // Create and initialize new scene
-    const newScene = new SceneClass(this.app);
+    // Create and initialize new scene. Optional factory lets callers pass
+    // constructor args without us having to make SceneCtor variadic.
+    const newScene = factory ? factory(this.app) : new SceneClass(this.app);
     this.currentScene = newScene;
     this.currentSceneClass = SceneClass;
 

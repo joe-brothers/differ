@@ -9,6 +9,9 @@ import {
   TotpDisableReq,
   ForgotPasswordReq,
   SetEmailReq,
+  VerifyEmailReq,
+  ResetPasswordReq,
+  type EmailStatusRes,
   type GameMode,
   type RecentGameEntry,
   type RecentGameOutcome,
@@ -21,7 +24,19 @@ import { getDailyState } from "../daily/service.js";
 import { signToken, signTotpTicket, verifyTotpTicket } from "./jwt.js";
 import { hashPassword, verifyPassword, needsRehash } from "./password.js";
 import { requireAuth, type AuthEnv } from "./middleware.js";
-import { checkRateLimit, guestKey, loginKey, upgradeKey } from "./rate-limit.js";
+import { checkRateLimit, emailIpKey, guestKey, loginKey, upgradeKey } from "./rate-limit.js";
+import {
+  EMAIL_USER_COOLDOWN_SEC,
+  RESET_TOKEN_TTL_SEC,
+  VERIFY_TOKEN_TTL_SEC,
+  consumeEmailToken,
+  isUserInCooldown,
+  issueEmailToken,
+  parseSqliteUtc,
+  sendResetEmail,
+  sendVerificationEmail,
+  stampUserSent,
+} from "./email.js";
 import { setTokenCookie, clearTokenCookie, setDeviceCookie, readDeviceCookie } from "./cookie.js";
 import { verifyTurnstile } from "./turnstile.js";
 import { generateSecret, buildOtpAuthUrl, verifyTotpCode } from "./totp.js";
@@ -512,11 +527,21 @@ protectedRoutes.post("/totp/disable", async (c) => {
   return c.json({ ok: true, enabled: false });
 });
 
-// --- Email (mockup) ----------------------------------------------------
-// Real email delivery (verification, password reset) is not wired up yet.
-// These endpoints persist the address and return a stub response so the
-// client UX can be built end-to-end; swap out the bodies once a transport
-// (Resend / SES / Mailgun) is chosen.
+// --- Email (verification + password reset) ----------------------------
+// Cost defenses:
+//  1. RL_EMAIL (per-IP, 3/min) sits in front of every send-triggering route.
+//  2. users.last_email_sent_at gives a per-user 60s cooldown — covers a
+//     legit user spamming "Resend" past the IP limiter via different routes.
+//  3. Tokens are single-use; issuing a new one invalidates prior ones.
+//  4. /forgot-password responds identically for missing/unverified accounts
+//     so an enumerator can't probe which usernames have valid email on file.
+
+function cooldownRemaining(lastEmailSentAt: string | null): number {
+  const last = parseSqliteUtc(lastEmailSentAt);
+  if (last === null) return 0;
+  const remaining = EMAIL_USER_COOLDOWN_SEC - Math.floor((Date.now() - last) / 1000);
+  return Math.max(0, remaining);
+}
 
 protectedRoutes.post("/email", async (c) => {
   const claims = c.get("user");
@@ -526,43 +551,240 @@ protectedRoutes.post("/email", async (c) => {
       403,
     );
   }
+  const limited = await checkRateLimit(c.env.RL_EMAIL, emailIpKey(c));
+  if (limited) return limited;
   const raw = await c.req.json().catch(() => ({}));
   const parsed = SetEmailReq.safeParse(raw);
   if (!parsed.success) {
     return c.json({ error: { code: "bad_request", message: "Invalid email" } }, 400);
   }
+  const email = parsed.data.email.trim().toLowerCase();
   const db = getDb(c.env.DB);
+  // Cooldown check first — we want to reject before mutating state, so a
+  // failed attempt doesn't leave the user with an updated-but-not-verified
+  // address. The shared row read also gives us the current email for
+  // idempotent "submit same value twice" handling.
+  const current = await db
+    .select({
+      email: users.email,
+      verifiedAt: users.emailVerifiedAt,
+      lastSent: users.lastEmailSentAt,
+    })
+    .from(users)
+    .where(eq(users.id, claims.sub))
+    .get();
+  if (current?.email === email && current.verifiedAt) {
+    // Already on file and verified — no-op rather than burn a send.
+    return c.json({ ok: true, email, verified: true });
+  }
+  if (await isUserInCooldown(db, claims.sub)) {
+    return c.json(
+      { error: { code: "rate_limited", message: "Please wait before resending" } },
+      429,
+    );
+  }
+  // Setting an address (re-)starts verification. Clearing email_verified_at
+  // is intentional — even if the user re-enters their old address, we want a
+  // fresh proof-of-control before treating it as authoritative.
   try {
-    await db.update(users).set({ email: parsed.data.email }).where(eq(users.id, claims.sub)).run();
+    await db
+      .update(users)
+      .set({ email, emailVerifiedAt: null })
+      .where(eq(users.id, claims.sub))
+      .run();
   } catch {
-    // unique constraint on email
     return c.json({ error: { code: "email_taken", message: "Email already in use" } }, 409);
   }
-  return c.json({ ok: true, email: parsed.data.email, mocked: true });
+  const token = await issueEmailToken(db, {
+    userId: claims.sub,
+    email,
+    purpose: "verify",
+    ttlSec: VERIFY_TOKEN_TTL_SEC,
+  });
+  await stampUserSent(db, claims.sub);
+  await sendVerificationEmail(c.env, { to: email, username: claims.name, token });
+  return c.json({ ok: true, email, verified: false });
 });
 
 protectedRoutes.get("/email", async (c) => {
   const claims = c.get("user");
   const db = getDb(c.env.DB);
   const row = await db
-    .select({ email: users.email })
+    .select({
+      email: users.email,
+      verifiedAt: users.emailVerifiedAt,
+      lastSent: users.lastEmailSentAt,
+    })
     .from(users)
     .where(eq(users.id, claims.sub))
     .get();
-  return c.json({ email: row?.email ?? null });
+  const body: EmailStatusRes = {
+    email: row?.email ?? null,
+    verified: !!row?.verifiedAt,
+    resendCooldownSec: cooldownRemaining(row?.lastSent ?? null),
+  };
+  return c.json(body);
 });
 
-authRoutes.route("/", protectedRoutes);
+protectedRoutes.post("/email/resend", async (c) => {
+  const claims = c.get("user");
+  if (claims.isGuest) {
+    return c.json({ error: { code: "guest_forbidden", message: "Sign up first" } }, 403);
+  }
+  const limited = await checkRateLimit(c.env.RL_EMAIL, emailIpKey(c));
+  if (limited) return limited;
+  const db = getDb(c.env.DB);
+  const row = await db
+    .select({ email: users.email, verifiedAt: users.emailVerifiedAt })
+    .from(users)
+    .where(eq(users.id, claims.sub))
+    .get();
+  if (!row?.email) {
+    return c.json({ error: { code: "no_email", message: "Add an email first" } }, 400);
+  }
+  if (row.verifiedAt) {
+    // Already verified — return 200 idempotently rather than spending a send.
+    return c.json({ ok: true, verified: true });
+  }
+  if (await isUserInCooldown(db, claims.sub)) {
+    return c.json(
+      { error: { code: "rate_limited", message: "Please wait before resending" } },
+      429,
+    );
+  }
+  const token = await issueEmailToken(db, {
+    userId: claims.sub,
+    email: row.email,
+    purpose: "verify",
+    ttlSec: VERIFY_TOKEN_TTL_SEC,
+  });
+  await stampUserSent(db, claims.sub);
+  await sendVerificationEmail(c.env, { to: row.email, username: claims.name, token });
+  return c.json({ ok: true });
+});
 
-// Mockup forgot-password endpoint. Always returns 200 so we don't leak
-// account existence; replace the body with an actual mail enqueue once
-// transport is wired up.
+// Public verification endpoint. The link in the email points the user back
+// to the SPA, which POSTs the token here. Auth is not required — the token
+// itself is the auth, and the row binds it to the user.
+authRoutes.post("/email/verify", async (c) => {
+  const limited = await checkRateLimit(c.env.RL_EMAIL, emailIpKey(c));
+  if (limited) return limited;
+  const raw = await c.req.json().catch(() => ({}));
+  const parsed = VerifyEmailReq.safeParse(raw);
+  if (!parsed.success) {
+    return c.json({ error: { code: "bad_request", message: "Invalid token" } }, 400);
+  }
+  const db = getDb(c.env.DB);
+  const tok = await consumeEmailToken(db, parsed.data.token, "verify");
+  if (!tok) {
+    return c.json(
+      { error: { code: "invalid_token", message: "Link expired or already used" } },
+      400,
+    );
+  }
+  // Race: user may have changed their email after issuing the token. Only
+  // mark verified if the address still matches what was confirmed.
+  const updated = await db
+    .update(users)
+    .set({ emailVerifiedAt: new Date().toISOString().replace("T", " ").replace(/\..+$/, "") })
+    .where(and(eq(users.id, tok.userId), eq(users.email, tok.email)))
+    .returning({ id: users.id });
+  if (updated.length === 0) {
+    return c.json({ error: { code: "invalid_token", message: "Email no longer matches" } }, 400);
+  }
+  return c.json({ ok: true, verified: true });
+});
+
+// Public auth routes must be registered BEFORE mounting protectedRoutes —
+// Hono's sub-app middleware (`use("*", requireAuth)`) intercepts any path
+// added on the parent after the mount, including unauthenticated flows.
+// Same reason /login and /guest are above protectedRoutes.
+
+// Forgot-password kicks off the reset flow. Always returns 200 so we don't
+// leak which (username, email) pairs map to real verified accounts. The
+// actual send only happens for non-guest users with a verified email on file.
 authRoutes.post("/forgot-password", async (c) => {
+  const limited = await checkRateLimit(c.env.RL_EMAIL, emailIpKey(c));
+  if (limited) return limited;
   const raw = await c.req.json().catch(() => ({}));
   const parsed = ForgotPasswordReq.safeParse(raw);
   if (!parsed.success) {
-    return c.json({ error: { code: "bad_request", message: "Invalid body" } }, 400);
+    // Even an invalid body returns 200 so that an attacker probing email
+    // syntax can't distinguish it from a "no such account" miss.
+    return c.json({ ok: true });
   }
-  // TODO(SEC-11): wire to a real mail transport. For now we just acknowledge.
-  return c.json({ ok: true, mocked: true });
+  const email = parsed.data.email.trim().toLowerCase();
+  const db = getDb(c.env.DB);
+  const row = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      verifiedAt: users.emailVerifiedAt,
+      isGuest: users.isGuest,
+    })
+    .from(users)
+    .where(eq(users.email, email))
+    .get();
+  // Bail silently for any of: no row, guest account, unverified email, or
+  // per-user cooldown active. Same response shape so a probing client can't
+  // tell these apart.
+  if (!row || row.isGuest === 1 || !row.email || !row.verifiedAt) {
+    return c.json({ ok: true });
+  }
+  if (await isUserInCooldown(db, row.id)) {
+    return c.json({ ok: true });
+  }
+  const token = await issueEmailToken(db, {
+    userId: row.id,
+    email: row.email,
+    purpose: "reset",
+    ttlSec: RESET_TOKEN_TTL_SEC,
+  });
+  await stampUserSent(db, row.id);
+  await sendResetEmail(c.env, { to: row.email, username: row.name, token });
+  return c.json({ ok: true });
 });
+
+// Submitted by the reset form. Token comes from the email link, password is
+// the new value. Success rotates the hash and invalidates the token.
+authRoutes.post("/reset-password", async (c) => {
+  const limited = await checkRateLimit(c.env.RL_EMAIL, emailIpKey(c));
+  if (limited) return limited;
+  const rawBody = await c.req.json().catch(() => ({}));
+  const parsed = ResetPasswordReq.safeParse(rawBody);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return c.json(
+      { error: { code: "bad_request", message: first?.message ?? "Invalid body" } },
+      400,
+    );
+  }
+  const db = getDb(c.env.DB);
+  const tok = await consumeEmailToken(db, parsed.data.token, "reset");
+  if (!tok) {
+    return c.json(
+      { error: { code: "invalid_token", message: "Link expired or already used" } },
+      400,
+    );
+  }
+  // Belt-and-suspenders: also confirm the email on the row still matches the
+  // token's snapshot, so a "change email + click old reset link" sequence
+  // can't reset the wrong account.
+  const user = await db
+    .select({ id: users.id, email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.id, tok.userId))
+    .get();
+  if (!user || user.email !== tok.email) {
+    return c.json(
+      { error: { code: "invalid_token", message: "Account state changed; request a new link" } },
+      400,
+    );
+  }
+  const hash = await hashPassword(parsed.data.password);
+  await db.update(users).set({ passwordHash: hash }).where(eq(users.id, user.id)).run();
+  return c.json({ ok: true });
+});
+
+authRoutes.route("/", protectedRoutes);
