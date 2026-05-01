@@ -6,6 +6,8 @@
   "scripts": {
     "dev:server": "pnpm -F @differ/server dev",
     "dev:client": "pnpm -F @differ/client dev",
+    "dev:tailworker": "pnpm -F @differ/tail-worker dev",
+    "dev:workers": "pnpm -F @differ/server exec wrangler dev --local --persist-to .wrangler/state -c wrangler.toml -c ../tail-worker/wrangler.toml",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
     "lint": "oxlint",
@@ -14,8 +16,8 @@
     "format:check": "oxfmt --check"
   },
   "devDependencies": {
-    "oxfmt": "0.45.0",
-    "oxlint": "1.60.0",
+    "oxfmt": "0.46.0",
+    "oxlint": "1.61.0",
     "typescript": "6.0.3"
   },
   "engines": {

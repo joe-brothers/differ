@@ -21,7 +21,7 @@ required = ["JWT_SECRET"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "differ-dev"
+database_name = "differ-local"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "src/db/migrations"
 
@@ -69,6 +69,13 @@ simple = { limit = 5, period = 60 }
 
 [observability]
 enabled = true
+
+# Local tail consumer. Wrangler's dev registry connects this to a separate
+# `wrangler dev` session running the tail worker (since wrangler v3.79+ /
+# 2025-09-23 multi-config support). The service name must match the tail
+# worker's local `name`, not its prod name.
+[[tail_consumers]]
+service = "differ-tail-local"
 
 # Daily Challenge: build the next day's puzzle set at 00:05 UTC. The 5-minute
 # offset is buffer for clock skew / cron lag — clients reading exactly at
@@ -141,6 +148,12 @@ simple = { limit = 5, period = 60 }
 
 [env.production.observability]
 enabled = true
+
+# Forward trace events (logs + exceptions) to the tail worker, which fans
+# errors out to Discord. The tail worker must be deployed first; otherwise
+# `wrangler deploy` fails to validate the consumer reference.
+[[env.production.tail_consumers]]
+service = "differ-tail"
 
 [env.production.triggers]
 crons = ["5 0 * * *"]

@@ -1,0 +1,38 @@
+name = "differ-tail-local"
+main = "src/index.ts"
+compatibility_date = "2026-04-21"
+compatibility_flags = ["nodejs_compat"]
+
+# Tail Workers receive trace events from producer Workers (configured via the
+# producer's `tail_consumers`). They have no fetch/scheduled handler — only
+# `tail`. We forward error-level events to Discord.
+
+[vars]
+# Optional label to distinguish environments in Discord messages.
+ENV_LABEL = "local"
+
+[dev]
+port = 8788
+
+[secrets]
+required = ["DISCORD_WEBHOOK_URL"]
+
+[observability]
+enabled = true
+
+# === Production ============================================================
+
+[env.production]
+name = "differ-tail"
+
+[env.production.placement]
+region = "aws:ap-northeast-2"
+
+[env.production.vars]
+ENV_LABEL = "production"
+
+[env.production.secrets]
+required = ["DISCORD_WEBHOOK_URL"]
+
+[env.production.observability]
+enabled = true

@@ -8,10 +8,10 @@
     "deploy:prod": "wrangler deploy --env production",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
     "build": "tsc --noEmit",
-    "db:migrate:local": "wrangler d1 migrations apply differ-dev --local",
+    "db:migrate:local": "wrangler d1 migrations apply differ-local --local",
     "db:migrate:prod": "wrangler d1 migrations apply differ --remote --env production",
     "db:seed:gen": "node --experimental-strip-types scripts/import-puzzles.ts",
-    "db:seed:local": "pnpm db:seed:gen && wrangler d1 execute differ-dev --local --file=scripts/seed/puzzles.sql",
+    "db:seed:local": "pnpm db:seed:gen && wrangler d1 execute differ-local --local --file=scripts/seed/puzzles.sql",
     "db:seed:prod": "pnpm db:seed:gen && wrangler d1 execute differ --remote --env production --file=scripts/seed/puzzles.sql",
     "test:rl:smoke": "node --test --experimental-strip-types tests/rate-limit.smoke.test.ts",
     "test:rl:k6": "k6 run tests/k6/rate-limit.js"
@@ -21,7 +21,7 @@
     "@noble/hashes": "2.2.0",
     "@tsndr/cloudflare-worker-jwt": "3.2.1",
     "drizzle-orm": "0.45.2",
-    "hono": "4.12.14",
+    "hono": "4.12.15",
     "otpauth": "9.5.0",
     "zod": "4.3.6"
   },
