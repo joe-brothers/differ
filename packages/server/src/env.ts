@@ -40,6 +40,9 @@ export interface Env {
   EMAIL: EmailBinding;
 
   JWT_SECRET: string; // secret, set via `wrangler secret put`
+  // AES-256 key (base64) for envelope-encrypting TOTP shared secrets at rest.
+  // Lives in Workers Secrets so a D1 dump alone can't recover the secrets.
+  TOTP_KEK: string;
   JWT_ISSUER: string;
   CDN_BASE: string;
   ALLOWED_ORIGINS: string; // comma-separated; empty = allow any (dev)

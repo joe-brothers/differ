@@ -20,7 +20,7 @@ APP_URL = "http://localhost:8080"
 # `wrangler secret put` remotely) before dev/deploy. Any value listed here must
 # NOT also appear in [vars], or the var would overwrite the secret on deploy.
 [secrets]
-required = ["JWT_SECRET"]
+required = ["JWT_SECRET", "TOTP_KEK"]
 
 [[d1_databases]]
 binding = "DB"
@@ -121,7 +121,7 @@ MAIL_FROM_NAME = "Differ"
 APP_URL = "https://differ.joe-brothers.com"
 
 [env.production.secrets]
-required = ["JWT_SECRET", "TURNSTILE_SECRET"]
+required = ["JWT_SECRET", "TURNSTILE_SECRET", "TOTP_KEK"]
 
 [[env.production.d1_databases]]
 binding = "DB"

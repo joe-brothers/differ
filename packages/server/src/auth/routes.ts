@@ -47,6 +47,7 @@ import {
 import { setTokenCookie, clearTokenCookie, setDeviceCookie, readDeviceCookie } from "./cookie.js";
 import { verifyTurnstile } from "./turnstile.js";
 import { generateSecret, buildOtpAuthUrl, verifyTotpCode } from "./totp.js";
+import { encryptTotpSecret, decryptTotpSecret } from "./totp-crypto.js";
 
 function clientIp(c: { req: { header: (h: string) => string | undefined } }): string | undefined {
   return c.req.header("cf-connecting-ip");
@@ -217,7 +218,14 @@ authRoutes.post("/login/totp", async (c) => {
   if (!row || row.totpEnabled !== 1 || !row.totpSecret) {
     return c.json({ error: { code: "invalid_credentials", message: "Invalid credentials" } }, 401);
   }
-  const okCode = await verifyTotpCode(row.totpSecret, code);
+  let plainSecret: string;
+  try {
+    plainSecret = await decryptTotpSecret(row.totpSecret, c.env.TOTP_KEK);
+  } catch (err) {
+    console.error("totp decrypt failed", { userId: row.id, err: String(err) });
+    return c.json({ error: { code: "invalid_credentials", message: "Invalid credentials" } }, 401);
+  }
+  const okCode = await verifyTotpCode(plainSecret, code);
   if (!okCode) {
     return c.json({ error: { code: "invalid_totp", message: "Invalid code" } }, 401);
   }
@@ -469,9 +477,10 @@ protectedRoutes.post("/totp/setup", async (c) => {
     );
   }
   const secret = generateSecret();
+  const encryptedSecret = await encryptTotpSecret(secret, c.env.TOTP_KEK);
   await db
     .update(users)
-    .set({ totpSecret: secret, totpEnabled: 0 })
+    .set({ totpSecret: encryptedSecret, totpEnabled: 0 })
     .where(eq(users.id, claims.sub))
     .run();
   const otpauthUrl = buildOtpAuthUrl({
@@ -498,7 +507,14 @@ protectedRoutes.post("/totp/verify", async (c) => {
   if (!row?.totpSecret) {
     return c.json({ error: { code: "not_setup", message: "Run TOTP setup first" } }, 400);
   }
-  const ok = await verifyTotpCode(row.totpSecret, parsed.data.code);
+  let plainSecret: string;
+  try {
+    plainSecret = await decryptTotpSecret(row.totpSecret, c.env.TOTP_KEK);
+  } catch (err) {
+    console.error("totp decrypt failed", { userId: claims.sub, err: String(err) });
+    return c.json({ error: { code: "not_setup", message: "Run TOTP setup first" } }, 400);
+  }
+  const ok = await verifyTotpCode(plainSecret, parsed.data.code);
   if (!ok) {
     return c.json({ error: { code: "invalid_totp", message: "Invalid code" } }, 401);
   }
