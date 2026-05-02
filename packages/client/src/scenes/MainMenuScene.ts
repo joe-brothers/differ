@@ -764,6 +764,19 @@ export class MainMenuScene extends Container implements IScene {
     };
     overlay.setButtonEnabled(submitBtn, false);
 
+    // Mirror the server's lowercase normalization in the field itself so the
+    // user always sees the form they're actually submitting. Registered first
+    // so subsequent input listeners read the already-lowercased value.
+    usernameInput.addEventListener("input", () => {
+      const v = usernameInput.value;
+      const lower = v.toLowerCase();
+      if (v === lower) return;
+      const start = usernameInput.selectionStart;
+      const end = usernameInput.selectionEnd;
+      usernameInput.value = lower;
+      if (start !== null && end !== null) usernameInput.setSelectionRange(start, end);
+    });
+
     passwordInput.addEventListener("input", () => {
       refreshStrength();
       refreshSubmit();
