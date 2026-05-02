@@ -22,9 +22,16 @@ import { getDb } from "../db/client.js";
 import { gameParticipants, games, users } from "../db/schema.js";
 import { getDailyState } from "../daily/service.js";
 import { signToken, signTotpTicket, verifyTotpTicket } from "./jwt.js";
-import { hashPassword, verifyPassword, needsRehash } from "./password.js";
+import { hashPassword, verifyPassword, needsRehash, dummyVerifyForTiming } from "./password.js";
 import { requireAuth, type AuthEnv } from "./middleware.js";
-import { checkRateLimit, emailIpKey, guestKey, loginKey, upgradeKey } from "./rate-limit.js";
+import {
+  checkRateLimit,
+  emailIpKey,
+  guestKey,
+  loginKey,
+  totpKey,
+  upgradeKey,
+} from "./rate-limit.js";
 import {
   EMAIL_USER_COOLDOWN_SEC,
   RESET_TOKEN_TTL_SEC,
@@ -122,7 +129,9 @@ authRoutes.post("/login", async (c) => {
   if (!parsed.success) {
     return c.json({ error: { code: "bad_request", message: "Invalid body" } }, 400);
   }
-  const { username, password } = parsed.data;
+  const { password } = parsed.data;
+  // Stored usernames are lowercase; lookups must match.
+  const username = parsed.data.username.toLowerCase();
   // Key by IP+username so a single attacker can't grind one account, but
   // legitimate users on shared NAT aren't blocked by neighbors' typos.
   const limited = await checkRateLimit(c.env.RL_LOGIN, loginKey(c, username));
@@ -144,6 +153,8 @@ authRoutes.post("/login", async (c) => {
     .where(eq(users.username, username))
     .get();
   if (!row || !row.passwordHash) {
+    // Match the verify-path latency so timing doesn't reveal account existence.
+    await dummyVerifyForTiming(password);
     return c.json({ error: { code: "invalid_credentials", message: "Invalid credentials" } }, 401);
   }
   const ok = await verifyPassword(password, row.passwordHash);
@@ -189,9 +200,8 @@ authRoutes.post("/login/totp", async (c) => {
       401,
     );
   }
-  // Reuse the login limiter, keyed by userId so a stolen ticket can't grind
-  // codes faster than legit users.
-  const limited = await checkRateLimit(c.env.RL_LOGIN, `totp:${userId}`);
+  // Keyed by userId so a ticket replayed from many IPs still hits one bucket.
+  const limited = await checkRateLimit(c.env.RL_TOTP, totpKey(userId));
   if (limited) return limited;
   const db = getDb(c.env.DB);
   const row = await db
@@ -375,7 +385,11 @@ protectedRoutes.post("/upgrade", async (c) => {
       400,
     );
   }
-  const { username, password } = parsed.data;
+  const { password } = parsed.data;
+  // username is the lookup key (lowercased to prevent "Alice"/"alice"
+  // squatting); `name` keeps the original casing for display.
+  const displayName = parsed.data.username;
+  const username = displayName.toLowerCase();
   // Strength gate is intentionally just the Zod regex (length + letter +
   // digit). zxcvbn runs only on the client as a visual nudge.
 
@@ -393,7 +407,7 @@ protectedRoutes.post("/upgrade", async (c) => {
   const hash = await hashPassword(password);
   const updated = await db
     .update(users)
-    .set({ username, passwordHash: hash, name: username, isGuest: 0 })
+    .set({ username, passwordHash: hash, name: displayName, isGuest: 0 })
     .where(and(eq(users.id, claims.sub), eq(users.isGuest, 1)))
     .returning({ id: users.id });
 
@@ -403,11 +417,11 @@ protectedRoutes.post("/upgrade", async (c) => {
 
   const token = await signToken(c.env.JWT_SECRET, c.env.JWT_ISSUER, {
     userId: claims.sub,
-    name: username,
+    name: displayName,
     isGuest: false,
   });
   setTokenCookie(c, token);
-  const body: AuthRes = { user: { userId: claims.sub, name: username, isGuest: false } };
+  const body: AuthRes = { user: { userId: claims.sub, name: displayName, isGuest: false } };
   return c.json(body);
 });
 

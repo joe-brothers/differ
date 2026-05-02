@@ -34,6 +34,11 @@ export function upgradeKey(c: Context, userId: string): string {
   return `upgrade:${clientIp(c)}:${userId}`;
 }
 
+// userId-only: IP-rotated ticket replay must still share one bucket.
+export function totpKey(userId: string): string {
+  return `totp:${userId}`;
+}
+
 export function roomCreateKey(userId: string): string {
   // Key by userId so authenticated abuse can't sneak past via VPN-hopping.
   return `room:${userId}`;

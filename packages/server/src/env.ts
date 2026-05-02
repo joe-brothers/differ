@@ -31,6 +31,7 @@ export interface Env {
   // Per-IP cap on outbound-mail-triggering routes (set-email, resend,
   // forgot-password). Paired with users.last_email_sent_at for per-user gating.
   RL_EMAIL: RateLimit;
+  RL_TOTP: RateLimit;
 
   // Cloudflare Email Service binding. `wrangler dev` simulates this by
   // writing each message to a temp file (so no DKIM setup needed locally);

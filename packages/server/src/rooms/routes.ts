@@ -17,6 +17,18 @@ roomRoutes.get("/:code/ws", async (c) => {
   if (!/^[A-Z0-9]{6}$/.test(code)) {
     return c.json({ error: { code: "bad_code", message: "Invalid room code" } }, 400);
   }
+  // CORS doesn't gate WS upgrades, so Origin must be checked here to block
+  // cross-site WS hijacking (cookie auto-attach). Empty list = dev passthrough.
+  const allowList = (c.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (allowList.length > 0) {
+    const origin = c.req.header("Origin");
+    if (!origin || !allowList.includes(origin)) {
+      return c.json({ error: { code: "forbidden_origin", message: "Origin not allowed" } }, 403);
+    }
+  }
   const token = readTokenCookie(c) ?? c.req.header("Authorization")?.replace(/^Bearer /, "");
   if (!token) {
     return c.json({ error: { code: "unauthenticated", message: "Missing token" } }, 401);

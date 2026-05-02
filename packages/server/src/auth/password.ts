@@ -118,15 +118,32 @@ async function verifyPbkdf2(password: string, stored: string): Promise<boolean> 
   return constantTimeEq(actual, expected);
 }
 
+// timingSafeEqual throws on length mismatch — guard first.
 function constantTimeEq(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
-  return diff === 0;
+  return crypto.subtle.timingSafeEqual(a, b);
 }
 
 // True if the stored hash uses an older scheme and should be re-hashed
 // after a successful verify.
 export function needsRehash(stored: string): boolean {
   return !stored.startsWith("$argon2id$");
+}
+
+// Lazy so the cold-start Argon2 cost is only paid once an unknown-user login
+// actually arrives. Cached for the isolate's lifetime.
+let dummyHashPromise: Promise<string> | null = null;
+function getDummyHash(): Promise<string> {
+  if (!dummyHashPromise) dummyHashPromise = hashPassword("differ-timing-dummy");
+  return dummyHashPromise;
+}
+
+// Called on the "no such user" branch of /login so its latency matches a real
+// password verify. Result is discarded.
+export async function dummyVerifyForTiming(password: string): Promise<void> {
+  try {
+    await verifyPassword(password, await getDummyHash());
+  } catch {
+    /* intentional */
+  }
 }

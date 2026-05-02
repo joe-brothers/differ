@@ -78,6 +78,12 @@ type = "ratelimit"
 namespace_id = "1005"
 simple = { limit = 3, period = 60 }
 
+[[unsafe.bindings]]
+name = "RL_TOTP"
+type = "ratelimit"
+namespace_id = "1006"
+simple = { limit = 5, period = 60 }
+
 [[send_email]]
 name = "EMAIL"
 
@@ -168,6 +174,12 @@ name = "RL_EMAIL"
 type = "ratelimit"
 namespace_id = "2005"
 simple = { limit = 3, period = 60 }
+
+[[env.production.unsafe.bindings]]
+name = "RL_TOTP"
+type = "ratelimit"
+namespace_id = "2006"
+simple = { limit = 5, period = 60 }
 
 [[env.production.send_email]]
 name = "EMAIL"
