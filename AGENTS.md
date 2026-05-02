@@ -15,3 +15,7 @@ Deployed on Cloudflare, using serverless infras
 ## Client
 
 Deployed on Cloudflare Pages
+
+## Convention
+
+- Write comment only when it's crucial or history needed. Write concisely.
