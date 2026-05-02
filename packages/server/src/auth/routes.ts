@@ -63,6 +63,11 @@ function turnstileTokenFrom(raw: unknown): string | undefined {
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
 
+authRoutes.use("*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store");
+});
+
 function randomGuestName(): string {
   const n = Math.floor(Math.random() * 9000 + 1000);
   return `Guest#${n}`;
