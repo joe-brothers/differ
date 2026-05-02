@@ -65,7 +65,31 @@ function safeStringify(v: unknown): string {
   }
 }
 
+// When the parent Worker proxies a WebSocket upgrade via `stub.fetch()` to a
+// Durable Object, the parent invocation stays open for the WS lifetime and
+// Cloudflare records its outcome as `canceled` once the socket closes — even
+// on a clean 1000 close. The DO-side traces (acceptWebSocket fetch +
+// hibernation callbacks) all remain `ok`, so these parent canceled traces are
+// pure noise. Filter them out here, but keep any with real exceptions or
+// error logs.
+function isWsProxyNoise(item: TraceItem): boolean {
+  if (item.outcome !== "canceled") return false;
+  if (item.executionModel !== "stateless") return false;
+  if ((item.exceptions ?? []).length > 0) return false;
+  if ((item.logs ?? []).some((l) => l.level === "error")) return false;
+  const event = item.event;
+  if (!event || !("request" in event) || !event.request) return false;
+  const url = (event.request as { url?: string }).url;
+  if (!url) return false;
+  try {
+    return new URL(url).pathname.endsWith("/ws");
+  } catch {
+    return false;
+  }
+}
+
 function isErrorTrace(item: TraceItem): boolean {
+  if (isWsProxyNoise(item)) return false;
   if (item.outcome !== "ok") return true;
   if ((item.exceptions ?? []).length > 0) return true;
   if ((item.logs ?? []).some((l) => l.level === "error")) return true;
