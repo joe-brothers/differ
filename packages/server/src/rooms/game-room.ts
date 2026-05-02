@@ -80,10 +80,10 @@ const START_COUNTDOWN_MS = 3000;
 // finally finishes loading. Better than holding the other player hostage.
 const LOADING_TIMEOUT_MS = 7000;
 
-// Click anti-abuse: per-player sliding window. Humans cap around 8-10 clicks
-// per second; bots brute-forcing pixel grids go far higher.
+// Click anti-abuse: per-player sliding window. Tight cap — comfortably above
+// frantic UI tapping but well below what a bot scanning the diff grid needs.
 const CLICK_WINDOW_MS = 1000;
-const CLICK_LIMIT_PER_WINDOW = 12;
+const CLICK_LIMIT_PER_WINDOW = 5;
 // Per-message size cap for malformed/oversized payloads.
 const MAX_WS_MESSAGE_BYTES = 4 * 1024;
 
