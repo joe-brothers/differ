@@ -1,5 +1,5 @@
 // Quick smoke test for rate limits using Node's built-in test runner.
-// Zero deps — runs with `node --test --experimental-strip-types`.
+// Zero deps — runs with `node --test`.
 //
 // Use this for fast local iteration; the k6 script under tests/k6/ is the
 // authoritative load-style test (per-VU isolation, cookies, thresholds).
