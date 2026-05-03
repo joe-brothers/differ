@@ -22,7 +22,7 @@
     "@tsndr/cloudflare-worker-jwt": "3.2.1",
     "drizzle-orm": "0.45.2",
     "hono": "4.12.15",
-    "otpauth": "9.5.0",
+    "otpauth": "9.5.1",
     "zod": "4.3.6"
   },
   "devDependencies": {
