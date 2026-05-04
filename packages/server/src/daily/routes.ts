@@ -10,21 +10,14 @@ import { utcDateKey } from "./service.js";
 
 export const dailyRoutes = new Hono<AuthEnv>();
 
-const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // matches genRoomCode
-
-// Deterministic 6-char room code derived from (date, userId). Same shape as
-// random codes (passes the WS upgrade regex `/^[A-Z0-9]{6}$/`) so the same
-// `/rooms/:code/ws` endpoint serves the daily flow.
+// Deterministic 64-char hex code derived from (date, userId). Daily codes are
+// never typed by users (the client gets them from /daily/start), so we use the
+// full SHA-256 digest — birthday collisions across (date,user) pairs would
+// otherwise put two players into the same DO at ~3.7M unique keys.
 async function dailyRoomCode(date: string, userId: string): Promise<string> {
   const data = new TextEncoder().encode(`daily:${date}:${userId}`);
   const buf = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
-  let out = "";
-  let i = 0;
-  while (out.length < 6 && i < buf.length) {
-    out += CODE_ALPHABET[buf[i]! % CODE_ALPHABET.length];
-    i++;
-  }
-  return out;
+  return [...buf].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 // POST /daily/start — start (or resume) today's daily attempt.

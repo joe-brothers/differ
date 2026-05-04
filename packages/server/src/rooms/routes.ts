@@ -13,8 +13,14 @@ export const roomRoutes = new Hono<AuthEnv>();
 // then we forward the verified token to the DO via a private header so the
 // DO can attach claims to the WebSocket on accept.
 roomRoutes.get("/:code/ws", async (c) => {
-  const code = c.req.param("code").toUpperCase();
-  if (!/^[A-Z0-9]{6}$/.test(code)) {
+  const raw = c.req.param("code");
+  // Two valid shapes: 6-char friendly code (uppercase alphanum, user-typed)
+  // and 64-hex-char daily code (deterministic SHA-256 of (date,userId), not
+  // typed). Friendly codes get uppercased for case-insensitive entry; daily
+  // codes are kept as-is since they're hex.
+  const isDaily = /^[a-f0-9]{64}$/.test(raw);
+  const code = isDaily ? raw : raw.toUpperCase();
+  if (!isDaily && !/^[A-Z0-9]{6}$/.test(code)) {
     return c.json({ error: { code: "bad_code", message: "Invalid room code" } }, 400);
   }
   // CORS doesn't gate WS upgrades, so Origin must be checked here to block
