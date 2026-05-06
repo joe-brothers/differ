@@ -1,5 +1,5 @@
 [tools]
-node = "25"
+node = "26"
 hk = "1.44"
 pkl = "0.31"
 pnpm = "11"
