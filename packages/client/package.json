@@ -17,13 +17,13 @@
     "@zxcvbn-ts/language-common": "3.0.4",
     "@zxcvbn-ts/language-en": "3.0.2",
     "canvas-confetti": "1.9.4",
-    "es-toolkit": "1.46.0",
+    "es-toolkit": "1.46.1",
     "pixi.js": "8.18.1",
     "qrcode": "1.5.4",
-    "react": "19.2.5",
-    "react-dom": "19.2.5",
-    "zod": "4.3.6",
-    "zustand": "5.0.12"
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "zod": "4.4.3",
+    "zustand": "5.0.13"
   },
   "devDependencies": {
     "@types/canvas-confetti": "1.9.0",
@@ -31,6 +31,6 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.1",
     "typescript": "6.0.3",
-    "vite": "8.0.10"
+    "vite": "8.0.11"
   }
 }
