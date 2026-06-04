@@ -94,8 +94,8 @@ importers:
         specifier: 0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260426.1)
       hono:
-        specifier: 4.12.15
-        version: 4.12.15
+        specifier: 4.12.21
+        version: 4.12.21
       otpauth:
         specifier: 9.5.0
         version: 9.5.0
@@ -1141,8 +1141,8 @@ packages:
   gifuct-js@2.1.2:
     resolution: {integrity: sha512-rI2asw77u0mGgwhV3qA+OEgYqaDn5UNqgs+Bx0FGwSpuqfYn+Ir6RQY5ENNQ8SbIiG/m5gVa7CD5RriO4f4Lsg==}
 
-  hono@4.12.15:
-    resolution: {integrity: sha512-qM0jDhFEaCBb4TxoW7f53Qrpv9RBiayUHo0S52JudprkhvpjIrGoU1mnnr29Fvd1U335ZFPZQY1wlkqgfGXyLg==}
+  hono@4.12.21:
+    resolution: {integrity: sha512-uV63apnb0kyPtAUwoWgaGh9HyIFcv8lgmzPZSiTBQAFOFGIzka5EZ1dZocmGnn0XdX0+XTqJ6Tqv7selMuGLRQ==}
     engines: {node: '>=16.9.0'}
 
   is-fullwidth-code-point@3.0.0:
@@ -2079,7 +2079,7 @@ snapshots:
     dependencies:
       js-binary-schema-parser: 2.0.3
 
-  hono@4.12.15: {}
+  hono@4.12.21: {}
 
   is-fullwidth-code-point@3.0.0: {}
 
